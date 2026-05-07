@@ -123,7 +123,7 @@ onSnapshot(TOURNAMENT_REF, (snap) => {
 // ============ CONSTANTS ============
 const PILLS = ['p1','p2','p3','p4'];
 const PW = 'volleylab';
-const DEF_SETTINGS = { numCouples:24, courts:4, perGroup:3, advPerGroup:1, startTime:'07:00', gameDur:30, breakDur:0 };
+const DEF_SETTINGS = { numCouples:26, courts:4, numGroups:8, advPerGroup:1, startTime:'07:00', gameDur:30, breakDur:0 };
 
 const DEFAULT_GROUPS = [
   { name:'A', teams:['שמרית חמלניצקי / וניר קיגלמן','שחף / הדר רוז','עידן / לינוי','מתן שפירא / דנה כהן'] },
@@ -851,14 +851,14 @@ function renderBracket() {
 
 // ============ SETTINGS ============
 const SETT_LIMITS = {
-  numCouples: [4, 64], courts: [1, 8], perGroup: [2, 6],
+  numCouples: [4, 64], courts: [1, 8], numGroups: [2, 16],
   advPerGroup: [1, 8], gameDur: [10, 120], breakDur: [0, 60]
 };
 
 function adjSetting(key, delta) {
   if (!admin) return;
   const [mn, mx] = SETT_LIMITS[key];
-  S.cfg[key] = Math.min(mx, Math.max(mn, S.cfg[key] + delta));
+  S.cfg[key] = Math.min(mx, Math.max(mn, (S.cfg[key] || mn) + delta));
   save(); renderSettings();
 }
 
@@ -867,16 +867,28 @@ function updateTimeSetting(key, val) {
   S.cfg[key] = val; save(); renderSettings();
 }
 
+// Distribute nc couples into ng groups as evenly as possible
+// Extra couples go to first groups
+function distributeGroups(nc, ng) {
+  const base = Math.floor(nc / ng);
+  const extra = nc % ng;
+  const sizes = [];
+  for (let i = 0; i < ng; i++) sizes.push(base + (i < extra ? 1 : 0));
+  return sizes;
+}
+
 function renderSettings() {
-  ['numCouples','courts','perGroup','advPerGroup','gameDur','breakDur'].forEach(k => {
+  const ng = S.cfg.numGroups || 8;
+  const nc = S.cfg.numCouples || 26;
+  ['numCouples','courts','numGroups','advPerGroup','gameDur','breakDur'].forEach(k => {
     const el = document.getElementById('disp-'+k);
     if (el) el.textContent = S.cfg[k];
   });
   const ti = document.getElementById('inp-startTime');
   if (ti) ti.value = S.cfg.startTime;
-  const ng = Math.ceil(S.cfg.numCouples / S.cfg.perGroup);
-  const gamesPerGroup = (S.cfg.perGroup * (S.cfg.perGroup-1)) / 2;
-  const totalGroupGames = ng * gamesPerGroup;
+
+  const sizes = distributeGroups(nc, ng);
+  const totalGroupGames = sizes.reduce((s, sz) => s + (sz * (sz-1)) / 2, 0);
   const koTeams = Math.max(0, ng * (S.cfg.advPerGroup || 0));
   const koGames = koTeams > 1 ? (koTeams - 1) : 0;
   const totalGames = totalGroupGames + koGames;
@@ -899,17 +911,18 @@ function renderSettings() {
 
 function applySettings() {
   if (!admin) return;
-  const pg = S.cfg.perGroup, nc = S.cfg.numCouples;
-  const ng = Math.ceil(nc / pg);
-  S.cfg.advPerGroup = Math.min(Math.max(S.cfg.advPerGroup || 1, 1), pg);
+  const ng = S.cfg.numGroups || 8;
+  const nc = S.cfg.numCouples || 26;
+  S.cfg.advPerGroup = Math.min(Math.max(S.cfg.advPerGroup || 1, 1), 4);
   const allTeams = S.groups.flatMap(g => g.teams).filter(t => t && t !== 'TBD / TBD');
   while (allTeams.length < nc) allTeams.push('TBD / TBD');
   const trimmed = allTeams.slice(0, nc);
+  const sizes = distributeGroups(nc, ng);
   const newGroups = [];
+  let idx = 0;
   for (let g = 0; g < ng; g++) {
-    const gt = [];
-    for (let t = g; t < nc; t += ng) gt.push(trimmed[t]);
-    newGroups.push({ name: String.fromCharCode(65+g), teams: gt });
+    newGroups.push({ name: String.fromCharCode(65+g), teams: trimmed.slice(idx, idx + sizes[g]) });
+    idx += sizes[g];
   }
   S.groups = newGroups; S.sched = []; S.ko = [];
   save(); generateSchedule();
