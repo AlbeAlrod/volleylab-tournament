@@ -1034,79 +1034,32 @@ function resetAll() {
 }
 
 // ============ BOOT ============
-load();
-refreshA();
-renderTeams();
-renderStageBar();
 
-
-
-function buildKO() {
-  const adv = S.cfg.advPerGroup || 0;
-  const ng = S.groups.length;
-  const koSeeds = [];
-
-  for (let rank = 1; rank <= adv; rank++) {
-    for (let g = 0; g < ng; g++) {
-      koSeeds.push(`${String.fromCharCode(65 + g)}${rank}`);
-    }
-  }
-
-  let n = koSeeds.length;
-  S.ko = [];
-
-  if (n < 2) {
-    save();
-    return;
-  }
-
-  // force next power of 2 so full tree is always visible
-  let bracketSize = 1;
-  while (bracketSize < n) bracketSize *= 2;
-
-  // pad with TBD placeholders if needed
-  while (koSeeds.length < bracketSize) {
-    koSeeds.push("TBD");
-  }
-
-  const firstRound = [];
-  for (let i = 0; i < bracketSize / 2; i++) {
-    firstRound.push({
-      a: koSeeds[i],
-      b: koSeeds[bracketSize - 1 - i],
-      sa: '',
-      sb: '',
-      seedA: koSeeds[i],
-      seedB: koSeeds[bracketSize - 1 - i]
-    });
-  }
-
-  S.ko.push(firstRound);
-
-  let matches = firstRound.length / 2;
-  while (matches >= 1) {
-    const round = [];
-    for (let i = 0; i < matches; i++) {
-      round.push({
-        a: '',
-        b: '',
-        sa: '',
-        sb: ''
-      });
-    }
-    S.ko.push(round);
-    matches = matches / 2;
-  }
-
-  save();
+function renderAll() {
+  renderTeams();
+  renderStandings();
+  renderSchedulePage();
+  updateKO();
+  renderBracket();
+  renderSettings();
+  renderStats();
+  renderStageBar();
 }
 
 const __originalSave = save;
-save = function(){
+save = function () {
   __originalSave();
   pushStateToCloud();
 };
 
+window.addEventListener("load", async () => {
+  load();
+  refreshA();
+
+  await loadInitialCloudState();
+
+  renderAll();
+});
 
 if (typeof BRK === 'function') window.BRK = BRK;
 if (typeof DUR === 'function') window.DUR = DUR;
