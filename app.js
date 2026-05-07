@@ -30,11 +30,6 @@ let syncIndicator = null;
 
 // ============ FIREBASE HELPERS ============
 
-// Convert state to plain JSON-safe object (no nested arrays issue)
-function toFirebase(data) {
-  return JSON.parse(JSON.stringify(data));
-}
-
 function setSyncStatus(ok) {
   if (!syncIndicator) syncIndicator = document.getElementById('sync-indicator');
   if (!syncIndicator) return;
@@ -42,11 +37,47 @@ function setSyncStatus(ok) {
   syncIndicator.title = ok ? 'Synced ✓' : 'Sync error';
 }
 
+// Firebase does not support nested arrays (array of arrays).
+// S.ko is [[game,game,...], [game,...], ...]
+// We convert it to { r0: [game,game], r1: [game], ... } for Firebase
+// and back when loading.
+
+function koToFirebase(ko) {
+  const obj = {};
+  ko.forEach((round, ri) => { obj[`r${ri}`] = round; });
+  return obj;
+}
+
+function koFromFirebase(obj) {
+  if (!obj) return [];
+  return Object.keys(obj)
+    .sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1)))
+    .map(k => obj[k]);
+}
+
+function stateToFirebase(s) {
+  return {
+    groups: s.groups,
+    sched:  s.sched,
+    ko:     koToFirebase(s.ko),
+    cfg:    s.cfg
+  };
+}
+
+function stateFromFirebase(data) {
+  return {
+    groups: data.groups || [],
+    sched:  data.sched  || [],
+    ko:     koFromFirebase(data.ko),
+    cfg:    data.cfg    || { ...DEF_SETTINGS }
+  };
+}
+
 async function pushStateToCloud() {
   if (!firebaseReady || applyingRemoteState) return;
   try {
     await setDoc(TOURNAMENT_REF, {
-      state: toFirebase(S),
+      state: stateToFirebase(S),
       updatedAt: serverTimestamp()
     }, { merge: true });
     setSyncStatus(true);
@@ -61,12 +92,11 @@ async function loadInitialCloudState() {
     const snap = await getDoc(TOURNAMENT_REF);
     if (snap.exists() && snap.data().state) {
       applyingRemoteState = true;
-      const remote = snap.data().state;
+      const remote = stateFromFirebase(snap.data().state);
       Object.assign(S, remote);
       localStorage.setItem(STORE, JSON.stringify(S));
       applyingRemoteState = false;
     } else {
-      // First time — push local state to cloud
       firebaseReady = true;
       await pushStateToCloud();
     }
@@ -82,7 +112,7 @@ onSnapshot(TOURNAMENT_REF, (snap) => {
   if (!snap.exists() || !snap.data().state) return;
   if (applyingRemoteState) return;
   applyingRemoteState = true;
-  const remote = snap.data().state;
+  const remote = stateFromFirebase(snap.data().state);
   Object.assign(S, remote);
   localStorage.setItem(STORE, JSON.stringify(S));
   applyingRemoteState = false;
