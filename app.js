@@ -93,10 +93,20 @@ async function loadInitialCloudState() {
     if (snap.exists() && snap.data().state) {
       applyingRemoteState = true;
       const remote = stateFromFirebase(snap.data().state);
-      Object.assign(S, remote);
-      localStorage.setItem(STORE, JSON.stringify(S));
+      // Only load from Firebase if groups are not TBD
+      const hasRealTeams = remote.groups && remote.groups[0] &&
+        remote.groups[0].teams[0] !== 'TBD / TBD' &&
+        remote.groups[0].teams[0] === DEFAULT_GROUPS[0].teams[0];
+      if (hasRealTeams) {
+        Object.assign(S, remote);
+        localStorage.setItem(STORE, JSON.stringify(S));
+      } else {
+        S.groups = JSON.parse(JSON.stringify(DEFAULT_GROUPS));
+        await pushStateToCloud();
+      }
       applyingRemoteState = false;
     } else {
+      S.groups = JSON.parse(JSON.stringify(DEFAULT_GROUPS));
       firebaseReady = true;
       await pushStateToCloud();
     }
