@@ -370,11 +370,29 @@ function generateSchedule() {
       all.push({ type:'g', gi, gn:grp.name, a, b, sa:'', sb:'' });
     });
   });
-  all.forEach((g, i) => {
-    g.court = (i % NC()) + 1;
-    g.si = Math.floor(i / NC());
-    g.time = addM(START(), g.si * slot);
-  });
+const scheduled = [];
+const pending = [...all];
+let slotIdx = 0;
+while (pending.length > 0) {
+  const usedTeams = new Set();
+  const remaining = [];
+  for (const g of pending) {
+    if (!usedTeams.has(g.a) && !usedTeams.has(g.b) && scheduled.filter(x => x.si === slotIdx).length < NC()) {
+      g.court = scheduled.filter(x => x.si === slotIdx).length + 1;
+      g.si = slotIdx;
+      g.time = addM(START(), slotIdx * slot);
+      usedTeams.add(g.a);
+      usedTeams.add(g.b);
+      scheduled.push(g);
+    } else {
+      remaining.push(g);
+    }
+  }
+  pending.length = 0;
+  pending.push(...remaining);
+  slotIdx++;
+}
+S.sched = scheduled;
   S.sched = all;
 
   const adv = S.cfg.advPerGroup || 0;
