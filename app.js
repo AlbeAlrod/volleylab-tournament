@@ -945,7 +945,6 @@ function renderSettings() {
   const slot = S.cfg.gameDur + S.cfg.breakDur;
   const parallelSlots = Math.ceil(totalGroupGames / S.cfg.courts) + 2; // +2 for late teams offset
   const endMins = sh*60 + sm + parallelSlots * slot + koGames * slot;
-  const endMins = sh*60 + sm + parallelSlots * slot + koGames * slot;
   const endH = String(Math.floor(endMins/60)%24).padStart(2,'0');
   const endM = String(endMins%60).padStart(2,'0');
   document.getElementById('sett-preview').innerHTML = `
