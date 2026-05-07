@@ -364,36 +364,58 @@ function rr(teams) {
 function generateSchedule() {
   if (!admin) return;
   const slot = DUR() + BRK();
-  const all = [];
+  const LATE_TEAMS = ['שחף / הדר רוז', 'מייקי / ביידץ', 'ערן יונה / קארן בנק'];
+
+  function isLate(g) { return LATE_TEAMS.includes(g.a) || LATE_TEAMS.includes(g.b); }
+
+  const allRaw = [];
   S.groups.forEach((grp, gi) => {
     rr(grp.teams).forEach(([a, b]) => {
-      all.push({ type:'g', gi, gn:grp.name, a, b, sa:'', sb:'' });
+      allRaw.push({ type:'g', gi, gn:grp.name, a, b, sa:'', sb:'' });
     });
   });
-const scheduled = [];
-const pending = [...all];
-let slotIdx = 0;
-while (pending.length > 0) {
-  const usedTeams = new Set();
-  const remaining = [];
-  for (const g of pending) {
-    if (!usedTeams.has(g.a) && !usedTeams.has(g.b) && scheduled.filter(x => x.si === slotIdx).length < NC()) {
-      g.court = scheduled.filter(x => x.si === slotIdx).length + 1;
-      g.si = slotIdx;
-      g.time = addM(START(), slotIdx * slot);
-      usedTeams.add(g.a);
-      usedTeams.add(g.b);
-      scheduled.push(g);
-    } else {
-      remaining.push(g);
+
+  const normal = allRaw.filter(g => !isLate(g));
+  const late   = allRaw.filter(g =>  isLate(g));
+
+  const gamesByGi = {};
+  S.groups.forEach((_, gi) => { gamesByGi[gi] = normal.filter(g => g.gi === gi); });
+  const lateByGi = {};
+  S.groups.forEach((_, gi) => { lateByGi[gi]  = late.filter(g => g.gi === gi); });
+
+  const maxNR = Math.max(...Object.values(gamesByGi).map(g => g.length), 0);
+  const maxLR = Math.max(...Object.values(lateByGi).map(g => g.length), 0);
+
+  const ordered = [];
+  for (let r = 0; r < maxNR; r++)
+    S.groups.forEach((_, gi) => { if (r < gamesByGi[gi].length) ordered.push(gamesByGi[gi][r]); });
+  for (let r = 0; r < maxLR; r++)
+    S.groups.forEach((_, gi) => { if (r < lateByGi[gi].length) ordered.push(lateByGi[gi][r]); });
+
+  const scheduled = [];
+  const pending = [...ordered];
+  let slotIdx = 0;
+  let safety = 0;
+  while (pending.length > 0 && safety < 300) {
+    safety++;
+    const usedTeams = new Set();
+    const remaining = [];
+    const slotGames = [];
+    for (const g of pending) {
+      if (!usedTeams.has(g.a) && !usedTeams.has(g.b) && slotGames.length < NC()) {
+        g.court = slotGames.length + 1;
+        g.si = slotIdx;
+        g.time = addM(START(), slotIdx * slot);
+        usedTeams.add(g.a); usedTeams.add(g.b);
+        slotGames.push(g); scheduled.push(g);
+      } else {
+        remaining.push(g);
+      }
     }
+    if (slotGames.length === 0) slotIdx++;
+    else { pending.length = 0; pending.push(...remaining); slotIdx++; }
   }
-  pending.length = 0;
-  pending.push(...remaining);
-  slotIdx++;
-}
-S.sched = scheduled;
-  S.sched = all;
+  S.sched = scheduled;
 
   const adv = S.cfg.advPerGroup || 0;
   const ng = S.groups.length;
