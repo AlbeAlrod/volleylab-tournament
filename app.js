@@ -22,13 +22,13 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
 const TOURNAMENT_REF = doc(db, "tournaments", "main");
+const STORE = 'vl25b';
 
 let firebaseReady = false;
 let applyingRemoteState = false;
 
 async function pushStateToCloud() {
   if (!firebaseReady || applyingRemoteState) return;
-  if (typeof admin !== "undefined" && !admin) return;
 
   try {
     await setDoc(TOURNAMENT_REF, {
