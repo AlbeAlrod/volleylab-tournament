@@ -27,12 +27,15 @@ const STORE = 'vl25b';
 let firebaseReady = false;
 let applyingRemoteState = false;
 
+function deepCleanForFirebase(data) {
+  return JSON.parse(JSON.stringify(data));
+}
+
 async function pushStateToCloud() {
   if (!firebaseReady || applyingRemoteState) return;
-
   try {
     await setDoc(TOURNAMENT_REF, {
-      state: S,
+      state: deepCleanForFirebase(S),
       updatedAt: serverTimestamp()
     }, { merge: true });
   } catch (err) {
