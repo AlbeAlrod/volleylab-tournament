@@ -93,20 +93,10 @@ async function loadInitialCloudState() {
     if (snap.exists() && snap.data().state) {
       applyingRemoteState = true;
       const remote = stateFromFirebase(snap.data().state);
-      // Only load from Firebase if groups are not TBD
-      const hasRealTeams = remote.groups && remote.groups[0] &&
-        remote.groups[0].teams[0] !== 'TBD / TBD' &&
-        remote.groups[0].teams[0] === DEFAULT_GROUPS[0].teams[0];
-      if (hasRealTeams) {
-        Object.assign(S, remote);
-        localStorage.setItem(STORE, JSON.stringify(S));
-      } else {
-        S.groups = JSON.parse(JSON.stringify(DEFAULT_GROUPS));
-        await pushStateToCloud();
-      }
+      Object.assign(S, remote);
+      localStorage.setItem(STORE, JSON.stringify(S));
       applyingRemoteState = false;
     } else {
-      S.groups = JSON.parse(JSON.stringify(DEFAULT_GROUPS));
       firebaseReady = true;
       await pushStateToCloud();
     }
@@ -140,7 +130,7 @@ const DEFAULT_GROUPS = [
   { name:'B', teams:['גב / כרמל ארזי','יערה ראוף / עומר כרמלי','שגיא / אורטל','עפרי רוסו / אמיר'] },
   { name:'C', teams:['אפרת / איתמר','שיי כהן / נועה עובד','בן גולדברג / טל זמירי'] },
   { name:'D', teams:['תום / דנה בובי','מייקי / ביידץ','חנה / לירון'] },
-  { name:'E', teams:['נעם ברוך / דור אביטל','פבל / סאני','עפרי בר / אביב'] },
+  { name:'E', teams:['נעם ברוך / דור אביטל','פבל / סאני'] },
   { name:'F', teams:['יהונתן / ענבל','כריסטינה / אייל','לי קאשי / עדי מנחם'] },
   { name:'G', teams:['תומר סייג / שרון סייג','לימור / אלון פנוש','נוה ספונים / מעין בן דב'] },
   { name:'H', teams:['גיל ליפשיץ / שני זוניגה','ערן יונה / קארן בנק','שהם / מיקה'] }
@@ -364,8 +354,8 @@ function rr(teams) {
 function generateSchedule() {
   if (!admin) return;
   const slot = DUR() + BRK();
+  // Late teams start later
   const LATE_TEAMS = ['שחף / הדר רוז', 'מייקי / ביידץ', 'ערן יונה / קארן בנק'];
-
   function isLate(g) { return LATE_TEAMS.includes(g.a) || LATE_TEAMS.includes(g.b); }
 
   const allRaw = [];
@@ -375,23 +365,21 @@ function generateSchedule() {
     });
   });
 
-  const normal = allRaw.filter(g => !isLate(g));
-  const late   = allRaw.filter(g =>  isLate(g));
-
+  // Interleave by round: normal first, late last
   const gamesByGi = {};
-  S.groups.forEach((_, gi) => { gamesByGi[gi] = normal.filter(g => g.gi === gi); });
+  S.groups.forEach((_, gi) => { gamesByGi[gi] = allRaw.filter(g => g.gi === gi && !isLate(g)); });
   const lateByGi = {};
-  S.groups.forEach((_, gi) => { lateByGi[gi]  = late.filter(g => g.gi === gi); });
+  S.groups.forEach((_, gi) => { lateByGi[gi] = allRaw.filter(g => g.gi === gi && isLate(g)); });
 
   const maxNR = Math.max(...Object.values(gamesByGi).map(g => g.length), 0);
   const maxLR = Math.max(...Object.values(lateByGi).map(g => g.length), 0);
-
   const ordered = [];
   for (let r = 0; r < maxNR; r++)
     S.groups.forEach((_, gi) => { if (r < gamesByGi[gi].length) ordered.push(gamesByGi[gi][r]); });
   for (let r = 0; r < maxLR; r++)
     S.groups.forEach((_, gi) => { if (r < lateByGi[gi].length) ordered.push(lateByGi[gi][r]); });
 
+  // Schedule with no-conflict
   const scheduled = [];
   const pending = [...ordered];
   let slotIdx = 0;
@@ -431,7 +419,7 @@ function generateSchedule() {
   while (koSeeds.length < bracketSize) koSeeds.push('TBD');
 
   S.ko = [];
-  const lastSi = all.length ? all[all.length-1].si : 0;
+  const lastSi = scheduled.length ? Math.max(...scheduled.map(g => g.si)) : 0;
   let rs = lastSi + 1;
 
   const firstRound = [];
@@ -943,7 +931,8 @@ function renderSettings() {
   const koGames = koTeams > 1 ? (koTeams - 1) : 0;
   const totalGames = totalGroupGames + koGames;
   const slot = S.cfg.gameDur + S.cfg.breakDur;
-  const parallelSlots = Math.ceil(totalGroupGames / S.cfg.courts) + 2; // +2 for late teams offset
+  const parallelSlots = Math.ceil(totalGroupGames / S.cfg.courts);
+  const [sh, sm] = S.cfg.startTime.split(':').map(Number);
   const endMins = sh*60 + sm + parallelSlots * slot + koGames * slot;
   const endH = String(Math.floor(endMins/60)%24).padStart(2,'0');
   const endM = String(endMins%60).padStart(2,'0');
