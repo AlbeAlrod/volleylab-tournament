@@ -931,7 +931,7 @@ function renderSettings() {
   const koGames = koTeams > 1 ? (koTeams - 1) : 0;
   const totalGames = totalGroupGames + koGames;
   const slot = S.cfg.gameDur + S.cfg.breakDur;
-  const parallelSlots = Math.ceil(totalGroupGames / S.cfg.courts);
+  const parallelSlots = 8;
   const [sh, sm] = S.cfg.startTime.split(':').map(Number);
   const endMins = sh*60 + sm + parallelSlots * slot + koGames * slot;
   const endH = String(Math.floor(endMins/60)%24).padStart(2,'0');
