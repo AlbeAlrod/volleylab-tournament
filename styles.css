@@ -269,3 +269,62 @@ main{position:relative;z-index:5;max-width:980px;margin:0 auto;padding:24px 16px
 
 .empty{text-align:center;padding:40px 20px;color:var(--text3);}
 .empty h3{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:var(--text2);margin-bottom:6px;}
+
+/* ===== DIVISION FILTER ===== */
+.div-filter{display:flex;align-items:center;gap:6px;}
+.div-filter-btn{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;letter-spacing:.6px;
+  text-transform:uppercase;padding:7px 14px;border-radius:999px;border:1px solid var(--border2);
+  background:var(--bg2);color:var(--purple);cursor:pointer;transition:all .2s;
+  box-shadow:0 2px 8px rgba(107,33,168,.06);white-space:nowrap;}
+.div-filter-btn:hover{background:var(--surface);border-color:var(--purple2);}
+.div-filter-btn.on{background:var(--purple);color:#fff;border-color:var(--purple);}
+
+/* ===== SYNC DOT ===== */
+.sync-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-left:6px;transition:background .3s;}
+.sync-ok{background:#10B981;}
+.sync-err{background:var(--red);}
+
+/* ===== DIVISION SECTION HEADERS ===== */
+.div-section-header{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:13px;
+  letter-spacing:4px;text-transform:uppercase;color:var(--purple);padding:6px 0 4px;
+  border-bottom:2px solid var(--purple);margin:18px 0 12px;grid-column:1/-1;}
+
+/* ===== TEAMS GRID OVERRIDES ===== */
+#teams-grid{display:flex;flex-direction:column;gap:0;}
+.groups-subgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:24px;}
+.stnds-subgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:24px;}
+#standings-grid{display:flex;flex-direction:column;gap:0;}
+
+/* ===== TEAM SEARCH ===== */
+.team-search-box{margin-bottom:16px;}
+.team-search-input{width:100%;background:var(--bg2);border:1.5px solid var(--border2);border-radius:var(--r);
+  color:var(--text);padding:11px 16px;font-size:14px;font-family:'Barlow',sans-serif;transition:border-color .2s;}
+.team-search-input:focus{outline:none;border-color:var(--purple2);}
+.team-search-input::placeholder{color:var(--text3);}
+#team-search-result{margin-bottom:18px;}
+
+.search-result-card{background:var(--bg2);border:1.5px solid var(--purple2);border-radius:var(--r);
+  padding:16px;box-shadow:0 4px 16px rgba(107,33,168,.1);}
+.src-header{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;color:var(--text);
+  margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.src-div-tag{font-size:11px;font-weight:700;letter-spacing:1px;padding:3px 8px;border-radius:999px;
+  background:var(--purple);color:#fff;}
+.src-table{width:100%;border-collapse:collapse;font-size:13px;}
+.src-table th{text-align:left;padding:5px 8px;font-size:11px;color:var(--text3);text-transform:uppercase;
+  letter-spacing:.05em;border-bottom:1px solid var(--border);}
+.src-table td{padding:7px 8px;border-top:1px solid var(--border);color:var(--text);}
+.src-table tr:first-child td{border-top:none;}
+.src-empty{font-size:13px;color:var(--text3);padding:8px 0;}
+
+/* ===== WOMEN MODE TOGGLE ===== */
+.women-mode-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
+.wmode-btn{flex:1;min-width:140px;padding:10px 14px;border-radius:var(--rs);
+  font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:.3px;
+  border:1.5px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer;
+  transition:all .2s;text-align:center;}
+.wmode-btn:hover{background:var(--surface);border-color:var(--purple2);}
+.wmode-btn.on{background:var(--purple);color:#fff;border-color:var(--purple);}
+
+/* ===== CHAMPION DISPLAY (no emoji) ===== */
+.ci{font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;letter-spacing:3px;
+  color:var(--gold);text-transform:uppercase;margin-bottom:8px;}

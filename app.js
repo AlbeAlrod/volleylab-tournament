@@ -21,26 +21,21 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
-const TOURNAMENT_REF = doc(db, "tournaments", "main");
-const STORE = 'vl25b';
+const WOMEN_REF = doc(db, "tournaments", "women");
+const MEN_REF   = doc(db, "tournaments", "men");
+const STORE = 'vl25b_v2';
 
 let firebaseReady = false;
 let applyingRemoteState = false;
 let syncIndicator = null;
 
 // ============ FIREBASE HELPERS ============
-
 function setSyncStatus(ok) {
   if (!syncIndicator) syncIndicator = document.getElementById('sync-indicator');
   if (!syncIndicator) return;
   syncIndicator.className = ok ? 'sync-dot sync-ok' : 'sync-dot sync-err';
-  syncIndicator.title = ok ? 'Synced ✓' : 'Sync error';
+  syncIndicator.title = ok ? 'Synced' : 'Sync error';
 }
-
-// Firebase does not support nested arrays (array of arrays).
-// S.ko is [[game,game,...], [game,...], ...]
-// We convert it to { r0: [game,game], r1: [game], ... } for Firebase
-// and back when loading.
 
 function koToFirebase(ko) {
   const obj = {};
@@ -55,104 +50,112 @@ function koFromFirebase(obj) {
     .map(k => obj[k]);
 }
 
-function stateToFirebase(s) {
-  return {
-    groups: s.groups,
-    sched:  s.sched,
-    ko:     koToFirebase(s.ko),
-    cfg:    s.cfg
-  };
+function divStateToFirebase(ds) {
+  return { groups: ds.groups, sched: ds.sched, ko: koToFirebase(ds.ko), cfg: ds.cfg };
 }
 
-function stateFromFirebase(data) {
+function divStateFromFirebase(data, defCfg) {
   return {
     groups: data.groups || [],
     sched:  data.sched  || [],
     ko:     koFromFirebase(data.ko),
-    cfg:    data.cfg    || { ...DEF_SETTINGS }
+    cfg:    data.cfg    || { ...defCfg }
   };
 }
 
 async function pushStateToCloud() {
   if (!firebaseReady || applyingRemoteState) return;
   try {
-    await setDoc(TOURNAMENT_REF, {
-      state: stateToFirebase(S),
-      updatedAt: serverTimestamp()
-    }, { merge: true });
+    await setDoc(WOMEN_REF, { state: divStateToFirebase(S.women), updatedAt: serverTimestamp() }, { merge: true });
+    await setDoc(MEN_REF,   { state: divStateToFirebase(S.men),   updatedAt: serverTimestamp() }, { merge: true });
     setSyncStatus(true);
   } catch (err) {
-    console.error("Could not save to Firebase:", err);
+    console.error("Firebase save error:", err);
     setSyncStatus(false);
   }
 }
 
 async function loadInitialCloudState() {
   try {
-    const snap = await getDoc(TOURNAMENT_REF);
-    if (snap.exists() && snap.data().state) {
-      applyingRemoteState = true;
-      const remote = stateFromFirebase(snap.data().state);
-      Object.assign(S, remote);
-      localStorage.setItem(STORE, JSON.stringify(S));
-      applyingRemoteState = false;
-    } else {
-      firebaseReady = true;
-      await pushStateToCloud();
-    }
+    const [snapW, snapM] = await Promise.all([getDoc(WOMEN_REF), getDoc(MEN_REF)]);
+    applyingRemoteState = true;
+    if (snapW.exists() && snapW.data().state)
+      Object.assign(S.women, divStateFromFirebase(snapW.data().state, DEF_CFG_WOMEN));
+    if (snapM.exists() && snapM.data().state)
+      Object.assign(S.men,   divStateFromFirebase(snapM.data().state, DEF_CFG_MEN));
+    localStorage.setItem(STORE, JSON.stringify(S));
+    applyingRemoteState = false;
+    if (!snapW.exists() || !snapM.exists()) await pushStateToCloud();
   } catch (err) {
-    console.error("Could not load Firebase state:", err);
+    console.error("Firebase load error:", err);
   } finally {
     firebaseReady = true;
   }
 }
 
-// Live listener — updates all devices in real time
-onSnapshot(TOURNAMENT_REF, (snap) => {
-  if (!snap.exists() || !snap.data().state) return;
-  if (applyingRemoteState) return;
+onSnapshot(WOMEN_REF, snap => {
+  if (!snap.exists() || !snap.data().state || applyingRemoteState) return;
   applyingRemoteState = true;
-  const remote = stateFromFirebase(snap.data().state);
-  Object.assign(S, remote);
+  Object.assign(S.women, divStateFromFirebase(snap.data().state, DEF_CFG_WOMEN));
   localStorage.setItem(STORE, JSON.stringify(S));
   applyingRemoteState = false;
-  renderAll();
-  setSyncStatus(true);
+  renderAll(); setSyncStatus(true);
+});
+
+onSnapshot(MEN_REF, snap => {
+  if (!snap.exists() || !snap.data().state || applyingRemoteState) return;
+  applyingRemoteState = true;
+  Object.assign(S.men, divStateFromFirebase(snap.data().state, DEF_CFG_MEN));
+  localStorage.setItem(STORE, JSON.stringify(S));
+  applyingRemoteState = false;
+  renderAll(); setSyncStatus(true);
 });
 
 // ============ CONSTANTS ============
 const PILLS = ['p1','p2','p3','p4'];
 const PW = 'volleylab';
-const DEF_SETTINGS = { numCouples:26, courts:4, numGroups:8, advPerGroup:1, startTime:'07:00', gameDur:30, breakDur:0 };
 
-const DEFAULT_GROUPS = [
-  { name:'A', teams:['שמרית חמלניצקי / וניר קיגלמן','שחף / הדר רוז','עידן / לינוי','מתן שפירא / דנה כהן'] },
-  { name:'B', teams:['גב / כרמל ארזי','יערה ראוף / עומר כרמלי','שגיא / אורטל','עפרי רוסו / אמיר'] },
-  { name:'C', teams:['אפרת / איתמר','שיי כהן / נועה עובד','בן גולדברג / טל זמירי'] },
-  { name:'D', teams:['תום / דנה בובי','מייקי / ביידץ','חנה / לירון'] },
-  { name:'E', teams:['נעם ברוך / דור אביטל','פבל / סאני'] },
-  { name:'F', teams:['יהונתן / ענבל','כריסטינה / אייל','לי קאשי / עדי מנחם'] },
-  { name:'G', teams:['תומר סייג / שרון סייג','לימור / אלון פנוש','נוה ספונים / מעין בן דב'] },
-  { name:'H', teams:['גיל ליפשיץ / שני זוניגה','ערן יונה / קארן בנק','שהם / מיקה'] }
+const DEF_CFG_WOMEN = { numCouples:10, courts:2, numGroups:2, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:0 };
+const DEF_CFG_MEN   = { numCouples:16, courts:2, numGroups:4, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:2 };
+
+const DEFAULT_WOMEN_GROUPS = [
+  { name:'A', teams:['Daniel Geler / Dana Cohen','Aya Shmueli / Noya Shtir','Rani / Tati','Inbal / Lial','Limor / Shmrit'] },
+  { name:'B', teams:['Lori Sazwan / Noy Maimon','Dana Bobi / Noa Beidetz','Ortal / Dikla','Efrat / Yarden','Karen Armoni / Karin'] }
+];
+
+const DEFAULT_MEN_GROUPS = [
+  { name:'A', teams:['Roy Ravid / Dror','Elior Cohen / Zeev Cohen','Gal Yoel Sadan / Omri Bendoli','Shahaf Moyal / Raz Goldshtein'] },
+  { name:'B', teams:["Shaham / Arik Laikin","Ra'anan Bracha / Sa'ar Danon","Alon Cohen / Roei Cohen","Or Tuvis / Avi'oz"] },
+  { name:'C', teams:['Tom Bachar / Daniel Kinan','Hillel / Uri',"El'ad / Hanan","? / Sagi Levi"] },
+  { name:'D', teams:['Matan Shapira / Eden Levi','Roei Masalton / Yarin Beit Dagan','Max David Tru / Vasily Leontiev','Dor Avital / Tomer Imber'] }
 ];
 
 // ============ STATE ============
-let S = { groups: JSON.parse(JSON.stringify(DEFAULT_GROUPS)), sched: [], ko: [], cfg: {...DEF_SETTINGS} };
+let S = {
+  women: { groups: JSON.parse(JSON.stringify(DEFAULT_WOMEN_GROUPS)), sched: [], ko: [], cfg: {...DEF_CFG_WOMEN} },
+  men:   { groups: JSON.parse(JSON.stringify(DEFAULT_MEN_GROUPS)),   sched: [], ko: [], cfg: {...DEF_CFG_MEN}   }
+};
+
+let activeDiv = 'all';
 let editTarget = null;
 let activeCourt = 'all';
 let admin = false;
-
-// ============ ACCESSORS ============
-function NC()    { return S.cfg.courts; }
-function DUR()   { return S.cfg.gameDur; }
-function BRK()   { return S.cfg.breakDur; }
-function START() { return S.cfg.startTime; }
 
 // ============ LOCAL STORAGE ============
 function load() {
   try {
     const d = localStorage.getItem(STORE);
-    if (d) { S = JSON.parse(d); if (!S.cfg) S.cfg = {...DEF_SETTINGS}; }
+    if (d) {
+      const parsed = JSON.parse(d);
+      if (parsed.women) {
+        if (!parsed.women.cfg) parsed.women.cfg = {...DEF_CFG_WOMEN};
+        Object.assign(S.women, parsed.women);
+      }
+      if (parsed.men) {
+        if (!parsed.men.cfg) parsed.men.cfg = {...DEF_CFG_MEN};
+        Object.assign(S.men, parsed.men);
+      }
+    }
   } catch(e) {}
 }
 
@@ -162,9 +165,52 @@ function save() {
 }
 
 // ============ TIME UTILS ============
-function t2m(t) { const [h,m] = t.split(':').map(Number); return h*60+m; }
+function t2m(t) { const [h,m] = (t||'00:00').split(':').map(Number); return h*60+m; }
 function m2t(m) { return `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`; }
 function addM(t, m) { return m2t(t2m(t)+m); }
+
+// ============ SCORE VALIDATION ============
+function isValidScore(a, b) {
+  if (isNaN(a) || isNaN(b)) return false;
+  const hi = Math.max(a, b), lo = Math.min(a, b);
+  if (hi < 21) return false;
+  if (hi === lo) return false;
+  if (hi === 21) return hi - lo >= 2;
+  return hi - lo === 2;
+}
+
+function scoreError(a, b) {
+  if (a === '' || b === '') return null;
+  const sa = parseInt(a), sb = parseInt(b);
+  if (isNaN(sa) || isNaN(sb)) return null;
+  const hi = Math.max(sa, sb), lo = Math.min(sa, sb);
+  if (hi < 21) return `Score must reach at least 21 · e.g. 21–${lo}`;
+  if (hi === lo) return `Scores can't be equal`;
+  if (hi === 21 && hi - lo < 2) return `Need a 2-point lead · e.g. 21–${21-2}`;
+  if (hi > 21 && hi - lo !== 2) return `Above 21 both must be exactly 2 apart · e.g. ${lo+2}–${lo}`;
+  return null;
+}
+
+// ============ ROUND NAME ============
+function roundName(count) {
+  if (count === 2)  return 'Final';
+  if (count === 4)  return 'Semifinals';
+  if (count === 8)  return 'Quarterfinals';
+  if (count === 16) return 'Round of 16';
+  if (count === 32) return 'Round of 32';
+  return `Round of ${count}`;
+}
+
+function getKORoundName(div, ri) {
+  const ko = S[div] && S[div].ko;
+  if (!ko || !ko[ri]) return '';
+  return roundName(ko[ri].length * 2);
+}
+
+// ============ ACTIVE DIVISIONS ============
+function getActiveDivs() {
+  return activeDiv === 'all' ? ['women','men'] : [activeDiv];
+}
 
 // ============ ADMIN / AUTH ============
 function adminClick() {
@@ -206,9 +252,13 @@ function refreshA() {
 }
 
 function rerender() {
+  renderDivFilter();
   renderStageBar();
-  const active = ['teams','standings','schedule','bracket','settings']
-    .find(p => document.getElementById('page-'+p) && document.getElementById('page-'+p).classList.contains('on'));
+  const pages = ['teams','standings','schedule','bracket','settings'];
+  const active = pages.find(p => {
+    const el = document.getElementById('page-'+p);
+    return el && el.classList.contains('on');
+  });
   if (active === 'teams')     renderTeams();
   if (active === 'standings') renderStandings();
   if (active === 'schedule')  renderSchedulePage();
@@ -219,6 +269,7 @@ function rerender() {
 
 function renderAll() {
   refreshA();
+  renderDivFilter();
   renderStageBar();
   renderTeams();
   renderStandings();
@@ -229,22 +280,39 @@ function renderAll() {
   renderStats();
 }
 
+// ============ DIVISION FILTER ============
+function setDiv(d) {
+  activeDiv = d;
+  activeCourt = 'all';
+  renderDivFilter();
+  rerender();
+}
+
+function renderDivFilter() {
+  ['all','women','men'].forEach(d => {
+    const btn = document.getElementById('df-' + d);
+    if (btn) btn.classList.toggle('on', activeDiv === d);
+  });
+}
+
 // ============ STAGE BAR ============
 function renderStageBar() {
   const bar = document.getElementById('stage-bar');
   if (!bar) return;
-  const poolDone = S.sched.length > 0 && S.sched.every(g => isValidScore(parseInt(g.sa), parseInt(g.sb)));
-  const koProgress = S.ko.map(round => round.every(g => isValidScore(parseInt(g.sa), parseInt(g.sb))));
+  const div = getActiveDivs()[0];
+  const DS = S[div];
+  const poolDone = DS.sched.length > 0 && DS.sched.every(g => isValidScore(parseInt(g.sa), parseInt(g.sb)));
+  const koProgress = DS.ko.map(round => round.every(g => isValidScore(parseInt(g.sa), parseInt(g.sb))));
   const steps = ['Pool Stage'];
-  S.ko.forEach((_, ri) => steps.push(getKORoundName(ri)));
-  let currentStep = 0;
-  if (S.sched.length === 0) { currentStep = 0; }
-  else if (!poolDone) { currentStep = 0; }
-  else { currentStep = 1; koProgress.forEach((done, i) => { if (done) currentStep = i+2; }); }
+  DS.ko.forEach((_, ri) => steps.push(getKORoundName(div, ri)));
+  let cur = 0;
+  if (DS.sched.length === 0) cur = 0;
+  else if (!poolDone) cur = 0;
+  else { cur = 1; koProgress.forEach((done, i) => { if (done) cur = i+2; }); }
   bar.innerHTML = steps.map((s, i) => `
     <div class="stage-step">
       ${i > 0 ? '<div class="stage-arrow"></div>' : ''}
-      <div class="stage-pill ${i < currentStep ? 'done' : i === currentStep ? 'active' : ''}">${s}</div>
+      <div class="stage-pill ${i < cur ? 'done' : i === cur ? 'active' : ''}">${s}</div>
     </div>`).join('');
 }
 
@@ -264,41 +332,61 @@ function goPage(p) {
 }
 
 // ============ TEAMS PAGE ============
-function renderTeams() {
+function renderTeams(highlight) {
   const grid = document.getElementById('teams-grid');
+  if (!grid) return;
   grid.innerHTML = '';
-  S.groups.forEach((grp, gi) => {
-    const card = document.createElement('div');
-    card.className = 'group-card';
-    const teamsHTML = grp.teams.map((t, ti) => `
-      <div class="team-item" id="titem-${gi}-${ti}">
-        <span class="team-rank">${ti+1}</span>
-        <span class="team-name-display" id="tname-${gi}-${ti}">${t}</span>
-        ${admin ? `<button class="gedit-btn" onclick="openEdit(${gi},${ti})">✏️</button>
-        <button class="team-del" onclick="deleteTeam(${gi},${ti})">×</button>` : ''}
-      </div>`).join('');
-    card.innerHTML = `
-      <div class="group-head">
-        <span class="gname">GROUP ${grp.name}</span>
-        <span style="font-size:11px;color:#fff;opacity:.85">${grp.teams.length} teams</span>
-      </div>
-      <div class="team-list" id="tlist-${gi}">${teamsHTML}</div>
-      ${admin ? `<div class="add-team-row">
-        <input class="add-team-input" id="new-team-${gi}" placeholder="Add couple (e.g. Dana / Avi)" onkeydown="if(event.key==='Enter')addTeam(${gi})"/>
-        <button class="add-team-btn" onclick="addTeam(${gi})">+ Add couple</button>
-      </div>` : ''}`;
-    grid.appendChild(card);
+
+  getActiveDivs().forEach(div => {
+    const DS = S[div];
+
+    if (activeDiv === 'all') {
+      const hdr = document.createElement('div');
+      hdr.className = 'div-section-header';
+      hdr.textContent = div === 'women' ? 'WOMEN' : 'MEN';
+      grid.appendChild(hdr);
+    }
+
+    const subGrid = document.createElement('div');
+    subGrid.className = 'groups-subgrid';
+
+    DS.groups.forEach((grp, gi) => {
+      if (highlight && !grp.teams.some(t => t.toLowerCase().includes(highlight.toLowerCase()))) return;
+      const card = document.createElement('div');
+      card.className = 'group-card';
+      const teamsHTML = grp.teams.map((t, ti) => `
+        <div class="team-item" id="titem-${div}-${gi}-${ti}">
+          <span class="team-rank">${ti+1}</span>
+          <span class="team-name-display" id="tname-${div}-${gi}-${ti}">${t}</span>
+          ${admin ? `<button class="gedit-btn" onclick="openEdit('${div}',${gi},${ti})">Edit</button>
+          <button class="team-del" onclick="deleteTeam('${div}',${gi},${ti})">&#215;</button>` : ''}
+        </div>`).join('');
+      card.innerHTML = `
+        <div class="group-head">
+          <span class="gname">GROUP ${grp.name}</span>
+          <span style="font-size:11px;color:#fff;opacity:.85">${grp.teams.length} teams</span>
+        </div>
+        <div class="team-list" id="tlist-${div}-${gi}">${teamsHTML}</div>
+        ${admin ? `<div class="add-team-row">
+          <input class="add-team-input" id="new-team-${div}-${gi}" placeholder="Add couple (e.g. Dana / Avi)"
+            onkeydown="if(event.key==='Enter')addTeam('${div}',${gi})"/>
+          <button class="add-team-btn" onclick="addTeam('${div}',${gi})">+ Add couple</button>
+        </div>` : ''}`;
+      subGrid.appendChild(card);
+    });
+
+    grid.appendChild(subGrid);
   });
 }
 
-function openEdit(gi, ti) {
+function openEdit(div, gi, ti) {
   if (!admin) return;
-  editTarget = {gi, ti};
-  const name = S.groups[gi].teams[ti];
+  editTarget = {div, gi, ti};
+  const name = S[div].groups[gi].teams[ti];
   const parts = name.split('/').map(s => s.trim());
   document.getElementById('edit-p1').value = parts[0] || '';
   document.getElementById('edit-p2').value = parts[1] || '';
-  document.getElementById('edit-modal-title').textContent = `Edit — Group ${S.groups[gi].name}`;
+  document.getElementById('edit-modal-title').textContent = `Edit — Group ${S[div].groups[gi].name}`;
   document.getElementById('edit-modal').classList.remove('h');
   document.getElementById('edit-p1').focus();
 }
@@ -307,32 +395,94 @@ function closeEdit() { document.getElementById('edit-modal').classList.add('h');
 
 function saveEdit() {
   if (!admin || !editTarget) return;
-  const {gi, ti} = editTarget;
+  const {div, gi, ti} = editTarget;
   const p1 = document.getElementById('edit-p1').value.trim();
   const p2 = document.getElementById('edit-p2').value.trim();
   const name = p2 ? `${p1} / ${p2}` : p1;
   if (!name) return;
-  const old = S.groups[gi].teams[ti];
-  S.groups[gi].teams[ti] = name;
-  S.sched.forEach(g => { if (g.a === old) g.a = name; if (g.b === old) g.b = name; });
+  const old = S[div].groups[gi].teams[ti];
+  S[div].groups[gi].teams[ti] = name;
+  S[div].sched.forEach(g => { if (g.a === old) g.a = name; if (g.b === old) g.b = name; });
+  S[div].ko.forEach(r => r.forEach(g => { if (g.a === old) g.a = name; if (g.b === old) g.b = name; }));
   closeEdit(); save(); renderTeams();
 }
 
-function addTeam(gi) {
+function addTeam(div, gi) {
   if (!admin) return;
-  const inp = document.getElementById(`new-team-${gi}`);
+  const inp = document.getElementById(`new-team-${div}-${gi}`);
+  if (!inp) return;
   const name = inp.value.trim();
   if (!name) return;
-  S.groups[gi].teams.push(name);
+  S[div].groups[gi].teams.push(name);
   inp.value = '';
   save(); renderTeams();
 }
 
-function deleteTeam(gi, ti) {
+function deleteTeam(div, gi, ti) {
   if (!admin) return;
-  if (S.groups[gi].teams.length <= 1) { alert('Each pool needs at least 1 team'); return; }
-  S.groups[gi].teams.splice(ti, 1);
+  if (S[div].groups[gi].teams.length <= 1) { alert('Each pool needs at least 1 team'); return; }
+  S[div].groups[gi].teams.splice(ti, 1);
   save(); renderTeams();
+}
+
+// ============ SEARCH ============
+function filterTeams() {
+  const inp = document.getElementById('team-search');
+  const query = (inp ? inp.value : '').trim().toLowerCase();
+  const resultEl = document.getElementById('team-search-result');
+
+  if (!query) {
+    if (resultEl) resultEl.style.display = 'none';
+    renderTeams();
+    return;
+  }
+
+  const divs = getActiveDivs();
+  let foundDiv = null, foundTeam = null;
+  outer:
+  for (const div of divs) {
+    for (const grp of S[div].groups) {
+      for (const t of grp.teams) {
+        if (t.toLowerCase().includes(query)) { foundDiv = div; foundTeam = t; break outer; }
+      }
+    }
+  }
+
+  if (!foundTeam) {
+    if (resultEl) resultEl.style.display = 'none';
+    renderTeams();
+    return;
+  }
+
+  const DS = S[foundDiv];
+  const poolGames = DS.sched.filter(g => g.a === foundTeam || g.b === foundTeam);
+  const koGames = DS.ko.flatMap((r, ri) => r.map((g, gi) => ({...g, _ri:ri, _gi:gi})))
+    .filter(g => g.a === foundTeam || g.b === foundTeam);
+  const allGames = [...poolGames, ...koGames].sort((a, b) => t2m(a.time||'00:00') - t2m(b.time||'00:00'));
+
+  const rows = allGames.map(g => {
+    const isA = g.a === foundTeam;
+    const opp = isA ? g.b : g.a;
+    const done = isValidScore(parseInt(g.sa), parseInt(g.sb));
+    const score = done ? (isA ? `${g.sa}:${g.sb}` : `${g.sb}:${g.sa}`) : '—';
+    const round = g._ri !== undefined ? getKORoundName(foundDiv, g._ri) : `Pool ${g.gn}`;
+    return `<tr><td>${g.time||'—'}</td><td>Court ${g.court||'?'}</td><td>${opp}</td><td>${score}</td><td>${round}</td></tr>`;
+  }).join('');
+
+  if (resultEl) {
+    resultEl.innerHTML = `<div class="search-result-card">
+      <div class="src-header">${foundTeam} <span class="src-div-tag">${foundDiv.toUpperCase()}</span></div>
+      ${allGames.length
+        ? `<table class="src-table">
+            <thead><tr><th>Time</th><th>Court</th><th>Opponent</th><th>Score</th><th>Round</th></tr></thead>
+            <tbody>${rows}</tbody>
+           </table>`
+        : '<div class="src-empty">No games scheduled yet — generate the schedule first</div>'}
+    </div>`;
+    resultEl.style.display = 'block';
+  }
+
+  renderTeams(query);
 }
 
 // ============ SCHEDULE GENERATION ============
@@ -351,63 +501,45 @@ function rr(teams) {
   return games;
 }
 
-function generateSchedule() {
-  if (!admin) return;
-  const slot = DUR() + BRK();
-  // Late teams start later
-  const LATE_TEAMS = ['שחף / הדר רוז', 'מייקי / ביידץ', 'ערן יונה / קארן בנק'];
-  function isLate(g) { return LATE_TEAMS.includes(g.a) || LATE_TEAMS.includes(g.b); }
+function generateScheduleForDiv(div) {
+  const DS = S[div];
+  const cfg = DS.cfg;
+  const slot = cfg.gameDur + cfg.breakDur;
+  const nc = cfg.courts || 2;
+  const offset = cfg.courtOffset || 0;
 
-  const allRaw = [];
-  S.groups.forEach((grp, gi) => {
+  const allGames = [];
+  DS.groups.forEach((grp, gi) => {
     rr(grp.teams).forEach(([a, b]) => {
-      allRaw.push({ type:'g', gi, gn:grp.name, a, b, sa:'', sb:'' });
+      allGames.push({ type:'g', div, gi, gn:grp.name, a, b, sa:'', sb:'' });
     });
   });
 
-  // Interleave by round: normal first, late last
-  const gamesByGi = {};
-  S.groups.forEach((_, gi) => { gamesByGi[gi] = allRaw.filter(g => g.gi === gi && !isLate(g)); });
-  const lateByGi = {};
-  S.groups.forEach((_, gi) => { lateByGi[gi] = allRaw.filter(g => g.gi === gi && isLate(g)); });
-
-  const maxNR = Math.max(...Object.values(gamesByGi).map(g => g.length), 0);
-  const maxLR = Math.max(...Object.values(lateByGi).map(g => g.length), 0);
-  const ordered = [];
-  for (let r = 0; r < maxNR; r++)
-    S.groups.forEach((_, gi) => { if (r < gamesByGi[gi].length) ordered.push(gamesByGi[gi][r]); });
-  for (let r = 0; r < maxLR; r++)
-    S.groups.forEach((_, gi) => { if (r < lateByGi[gi].length) ordered.push(lateByGi[gi][r]); });
-
-  // Schedule with no-conflict
   const scheduled = [];
-  const pending = [...ordered];
-  let slotIdx = 0;
-  let safety = 0;
+  const pending = [...allGames];
+  let slotIdx = 0, safety = 0;
   while (pending.length > 0 && safety < 300) {
     safety++;
     const usedTeams = new Set();
     const remaining = [];
     const slotGames = [];
     for (const g of pending) {
-      if (!usedTeams.has(g.a) && !usedTeams.has(g.b) && slotGames.length < NC()) {
-        g.court = slotGames.length + 1;
+      if (!usedTeams.has(g.a) && !usedTeams.has(g.b) && slotGames.length < nc) {
+        g.court = slotGames.length + 1 + offset;
         g.si = slotIdx;
-        g.time = addM(START(), slotIdx * slot);
+        g.time = addM(cfg.startTime, slotIdx * slot);
         usedTeams.add(g.a); usedTeams.add(g.b);
         slotGames.push(g); scheduled.push(g);
-      } else {
-        remaining.push(g);
-      }
+      } else { remaining.push(g); }
     }
     if (slotGames.length === 0) slotIdx++;
     else { pending.length = 0; pending.push(...remaining); slotIdx++; }
   }
-  S.sched = scheduled;
+  DS.sched = scheduled;
 
-  const adv = S.cfg.advPerGroup || 0;
-  const ng = S.groups.length;
-  if (adv < 1) { S.ko = []; save(); goPage('schedule'); return; }
+  const adv = cfg.advPerGroup || 0;
+  const ng = DS.groups.length;
+  if (adv < 1) { DS.ko = []; return; }
 
   const koSeeds = [];
   for (let rank = 1; rank <= adv; rank++)
@@ -418,64 +550,74 @@ function generateSchedule() {
   while (bracketSize < koSeeds.length) bracketSize *= 2;
   while (koSeeds.length < bracketSize) koSeeds.push('TBD');
 
-  S.ko = [];
+  DS.ko = [];
   const lastSi = scheduled.length ? Math.max(...scheduled.map(g => g.si)) : 0;
   let rs = lastSi + 1;
 
   const firstRound = [];
   for (let i = 0; i < bracketSize / 2; i++) {
-    const aSeed = koSeeds[i];
-    const bSeed = koSeeds[bracketSize - 1 - i];
-    firstRound.push({ a:aSeed, b:bSeed, seedA:aSeed, seedB:bSeed, sa:'', sb:'' });
+    const aSeed = koSeeds[i], bSeed = koSeeds[bracketSize - 1 - i];
+    firstRound.push({ a:aSeed, b:bSeed, seedA:aSeed, seedB:bSeed, sa:'', sb:'', div });
   }
   firstRound.forEach((g, gi) => {
-    g.court = (gi % NC()) + 1;
-    g.si = rs + Math.floor(gi / NC());
-    g.time = addM(START(), g.si * slot);
+    g.court = (gi % nc) + 1 + offset;
+    g.si = rs + Math.floor(gi / nc);
+    g.time = addM(cfg.startTime, g.si * slot);
   });
-  rs += Math.ceil(firstRound.length / NC());
-  S.ko.push(firstRound);
+  rs += Math.ceil(firstRound.length / 2);
+  DS.ko.push(firstRound);
 
   let matches = firstRound.length / 2;
   while (matches >= 1) {
+    const prevName = getKORoundName(div, DS.ko.length - 1);
     const round = [];
     for (let i = 0; i < matches; i++) {
       round.push({
-        a: `Winner of ${getKORoundName(S.ko.length-1)} ${i*2+1}`,
-        b: `Winner of ${getKORoundName(S.ko.length-1)} ${i*2+2}`,
-        sa: '', sb: '',
-        court: (i % NC()) + 1,
-        si: rs + Math.floor(i / NC()),
-        time: addM(START(), (rs + Math.floor(i / NC())) * slot)
+        a: `Winner of ${prevName} ${i*2+1}`,
+        b: `Winner of ${prevName} ${i*2+2}`,
+        sa: '', sb: '', div,
+        court: (i % nc) + 1 + offset,
+        si: rs + Math.floor(i / nc),
+        time: addM(cfg.startTime, (rs + Math.floor(i / nc)) * slot)
       });
     }
-    rs += Math.ceil(round.length / NC());
-    S.ko.push(round);
-    matches = matches / 2;
+    rs += Math.ceil(round.length / 2);
+    DS.ko.push(round);
+    matches = Math.floor(matches / 2);
   }
+}
 
+function generateSchedule() {
+  if (!admin) return;
+  getActiveDivs().forEach(div => generateScheduleForDiv(div));
   save();
   goPage('schedule');
 }
 
 // ============ STANDINGS ============
-function getStandings(gi) {
-  const grp = S.groups[gi];
+function getStandings(div, gi) {
+  const DS = S[div];
+  const grp = DS.groups[gi];
   const rec = {};
   grp.teams.forEach(t => rec[t] = {w:0, l:0, pts:0, scored:0, against:0});
-  S.sched.filter(g => g.type === 'g' && g.gi === gi).forEach(g => {
+  DS.sched.filter(g => g.type === 'g' && g.gi === gi).forEach(g => {
     const sa = parseInt(g.sa), sb = parseInt(g.sb);
     if (!isNaN(sa) && !isNaN(sb) && g.sa !== '' && g.sb !== '') {
       if (rec[g.a]) { rec[g.a].scored += sa; rec[g.a].against += sb; }
       if (rec[g.b]) { rec[g.b].scored += sb; rec[g.b].against += sa; }
-      if (sa > sb) { if(rec[g.a]){rec[g.a].w++;rec[g.a].pts+=2;} if(rec[g.b]){rec[g.b].l++;rec[g.b].pts+=1;} }
-      else if (sb > sa) { if(rec[g.b]){rec[g.b].w++;rec[g.b].pts+=2;} if(rec[g.a]){rec[g.a].l++;rec[g.a].pts+=1;} }
+      if (sa > sb) {
+        if (rec[g.a]) { rec[g.a].w++; rec[g.a].pts+=2; }
+        if (rec[g.b]) { rec[g.b].l++; rec[g.b].pts+=1; }
+      } else if (sb > sa) {
+        if (rec[g.b]) { rec[g.b].w++; rec[g.b].pts+=2; }
+        if (rec[g.a]) { rec[g.a].l++; rec[g.a].pts+=1; }
+      }
     }
   });
   return grp.teams.map(t => ({name:t, ...rec[t], diff:(rec[t].scored-rec[t].against)}))
     .sort((a, b) => {
       if (b.pts !== a.pts) return b.pts - a.pts;
-      if (b.w !== a.w) return b.w - a.w;
+      if (b.w   !== a.w)   return b.w   - a.w;
       if (b.diff !== a.diff) return b.diff - a.diff;
       return b.scored - a.scored;
     });
@@ -483,61 +625,62 @@ function getStandings(gi) {
 
 function renderStandings() {
   const grid = document.getElementById('standings-grid');
+  if (!grid) return;
   grid.innerHTML = '';
-  S.groups.forEach((grp, gi) => {
-    const st = getStandings(gi);
-    const played = S.sched.filter(g => g.gi === gi && isValidScore(parseInt(g.sa), parseInt(g.sb))).length;
-    const card = document.createElement('div'); card.className = 'scard';
-    const rows = st.map((t, i) => {
-      const isWinner = i === 0 && played > 0;
-      const diff = t.diff || 0;
-      const diffStr = diff > 0 ? `+${diff}` : String(diff);
-      const diffClass = diff > 0 ? 'diff-pos' : diff < 0 ? 'diff-neg' : 'diff-zero';
-      return `<tr class="${isWinner ? 'winner' : ''}">
-        <td><span class="rnk">${isWinner ? '#1' : i+1}</span>${t.name}</td>
-        <td>${t.w}</td><td>${t.l}</td>
-        <td class="${diffClass}">${diff !== 0 || t.w > 0 || t.l > 0 ? diffStr : '—'}</td>
-        <td class="pts-val">${t.pts}</td>
-      </tr>`;
-    }).join('');
-    card.innerHTML = `<div class="scard-head"><span class="scard-name">GROUP ${grp.name}</span><span style="font-size:11px;color:var(--text3)">Top teams advance</span></div>
-    <table class="stbl"><thead><tr><th>Team</th><th>W</th><th>L</th><th>+/−</th><th>Pts</th></tr></thead>
-    <tbody>${rows}</tbody></table>`;
-    grid.appendChild(card);
+
+  getActiveDivs().forEach(div => {
+    const DS = S[div];
+    if (activeDiv === 'all') {
+      const hdr = document.createElement('div');
+      hdr.className = 'div-section-header';
+      hdr.textContent = div === 'women' ? 'WOMEN' : 'MEN';
+      grid.appendChild(hdr);
+    }
+    const sub = document.createElement('div');
+    sub.className = 'stnds-subgrid';
+
+    DS.groups.forEach((grp, gi) => {
+      const st = getStandings(div, gi);
+      const adv = DS.cfg.advPerGroup || 1;
+      const played = DS.sched.filter(g => g.gi === gi && isValidScore(parseInt(g.sa), parseInt(g.sb))).length;
+      const card = document.createElement('div');
+      card.className = 'scard';
+      const rows = st.map((t, i) => {
+        const isWinner = i < adv && played > 0;
+        const diff = t.diff || 0;
+        const diffStr = diff > 0 ? `+${diff}` : String(diff);
+        const diffClass = diff > 0 ? 'diff-pos' : diff < 0 ? 'diff-neg' : 'diff-zero';
+        return `<tr class="${isWinner ? 'winner' : ''}">
+          <td><span class="rnk">#${i+1}</span>${t.name}</td>
+          <td>${t.w}</td><td>${t.l}</td>
+          <td class="${diffClass}">${diff !== 0 || t.w > 0 || t.l > 0 ? diffStr : '—'}</td>
+          <td class="pts-val">${t.pts}</td>
+        </tr>`;
+      }).join('');
+      card.innerHTML = `<div class="scard-head">
+          <span class="scard-name">GROUP ${grp.name}</span>
+          <span style="font-size:11px;color:var(--text3)">Top ${adv} advance</span>
+        </div>
+        <table class="stbl">
+          <thead><tr><th>Team</th><th>W</th><th>L</th><th>+/−</th><th>Pts</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+      sub.appendChild(card);
+    });
+    grid.appendChild(sub);
   });
 }
 
-// ============ SCORE VALIDATION ============
-function isValidScore(a, b) {
-  if (isNaN(a) || isNaN(b)) return false;
-  const hi = Math.max(a, b), lo = Math.min(a, b);
-  if (hi < 21) return false;
-  if (hi === lo) return false;
-  if (hi === 21) return hi - lo >= 2;
-  return hi - lo === 2;
-}
-
-function scoreError(a, b) {
-  if (a === '' || b === '') return null;
-  const sa = parseInt(a), sb = parseInt(b);
-  if (isNaN(sa) || isNaN(sb)) return null;
-  const hi = Math.max(sa, sb), lo = Math.min(sa, sb);
-  if (hi < 21) return `Score must reach at least 21 · e.g. 21–${lo}`;
-  if (hi === lo) return `Scores can't be equal`;
-  if (hi === 21 && hi - lo < 2) return `Need a 2-point lead · e.g. 21–${21-2}`;
-  if (hi > 21 && hi - lo !== 2) return `Above 21 both must be exactly 2 apart · e.g. ${lo+2}–${lo}`;
-  return null;
-}
-
-function setGS(idx, k, v) {
+// ============ SCORE SETTERS ============
+function setGS(div, idx, k, v) {
   if (!admin) return;
-  S.sched[idx][k] = v;
-  const g = S.sched[idx];
+  S[div].sched[idx][k] = v;
+  const g = S[div].sched[idx];
   const err = scoreError(g.sa, g.sb);
-  const errEl = document.getElementById(`gerr-${idx}`);
+  const errEl = document.getElementById(`gerr-${div}-${idx}`);
   if (errEl) { errEl.textContent = err || ''; errEl.style.display = err ? 'block' : 'none'; }
   if (!err) {
-    updateKO();
+    updateKOForDiv(div);
     save();
     if (document.getElementById('page-standings').classList.contains('on')) renderStandings();
     if (document.getElementById('page-bracket').classList.contains('on')) renderBracket();
@@ -545,15 +688,15 @@ function setGS(idx, k, v) {
   }
 }
 
-function setKS(ri, gi, k, v) {
+function setKS(div, ri, gi, k, v) {
   if (!admin) return;
-  S.ko[ri][gi][k] = v;
-  const g = S.ko[ri][gi];
+  S[div].ko[ri][gi][k] = v;
+  const g = S[div].ko[ri][gi];
   const err = scoreError(g.sa, g.sb);
-  const errEl = document.getElementById(`kerr-${ri}-${gi}`);
+  const errEl = document.getElementById(`kerr-${div}-${ri}-${gi}`);
   if (errEl) { errEl.textContent = err || ''; errEl.style.display = err ? 'block' : 'none'; }
   if (!err) {
-    updateKO();
+    updateKOForDiv(div);
     save();
     if (document.getElementById('page-bracket').classList.contains('on')) renderBracket();
   }
@@ -564,123 +707,162 @@ function renderSchedulePage() { renderStats(); renderCourtFilter(); renderSchedu
 
 function renderStats() {
   const el = document.getElementById('sbar');
-  if (!S.sched.length) { el.innerHTML = ''; return; }
-  const ko = S.ko.reduce((s, r) => s + r.length, 0);
-  const done = S.sched.filter(g => g.sa !== '' && g.sb !== '').length;
-  const last = S.ko.length ? S.ko[S.ko.length-1][0] : S.sched[S.sched.length-1];
-  const end = last ? addM(last.time, DUR()) : '--:--';
+  if (!el) return;
+  const divs = getActiveDivs();
+  let totalPool = 0, donePool = 0, totalKO = 0;
+  let lastTime = '07:00', lastDur = 30;
+
+  divs.forEach(div => {
+    const DS = S[div];
+    totalPool += DS.sched.length;
+    donePool  += DS.sched.filter(g => isValidScore(parseInt(g.sa), parseInt(g.sb))).length;
+    totalKO   += DS.ko.reduce((s, r) => s + r.length, 0);
+    const src = DS.ko.length ? DS.ko[DS.ko.length-1] : null;
+    const last = src ? src[0] : (DS.sched.length ? DS.sched[DS.sched.length-1] : null);
+    if (last && t2m(last.time||'00:00') > t2m(lastTime)) {
+      lastTime = last.time; lastDur = DS.cfg.gameDur;
+    }
+  });
+
+  if (!totalPool) { el.innerHTML = ''; return; }
+  const end = addM(lastTime, lastDur);
   el.innerHTML = `
-    <div class="sc"><div class="sl">Pool Games</div><div class="sv">${done}/${S.sched.length}</div></div>
-    <div class="sc"><div class="sl">Knockout Games</div><div class="sv">${ko}</div></div>
-    <div class="sc"><div class="sl">Courts</div><div class="sv">${NC()}</div></div>
+    <div class="sc"><div class="sl">Pool Games</div><div class="sv">${donePool}/${totalPool}</div></div>
+    <div class="sc"><div class="sl">KO Games</div><div class="sv">${totalKO}</div></div>
+    <div class="sc"><div class="sl">Courts</div><div class="sv">${divs.length === 2 ? '4' : '2'}</div></div>
     <div class="sc"><div class="sl">Est. End</div><div class="sv a">${end}</div></div>`;
 }
 
 function renderCourtFilter() {
   const el = document.getElementById('court-filter');
-  const courts = [1, 2, 3, 4].slice(0, NC());
+  if (!el) return;
+  const courts = new Set();
+  getActiveDivs().forEach(div => {
+    const offset = S[div].cfg.courtOffset || 0;
+    for (let i = 1; i <= (S[div].cfg.courts || 2); i++) courts.add(i + offset);
+  });
+  const sorted = [...courts].sort((a, b) => a - b);
   el.innerHTML = `<button class="cf-btn cf-all ${activeCourt === 'all' ? 'on' : ''}" onclick="setCourt('all')">All Courts</button>`
-    + courts.map(c => `<button class="cf-btn cf-${c} ${activeCourt === c ? 'on' : ''}" onclick="setCourt(${c})">Court ${c}</button>`).join('');
+    + sorted.map(c => `<button class="cf-btn cf-${c} ${activeCourt === c ? 'on' : ''}" onclick="setCourt(${c})">Court ${c}</button>`).join('');
 }
 
 function setCourt(c) { activeCourt = c; renderCourtFilter(); renderScheduleContent(); }
 
 function renderScheduleContent() {
   const el = document.getElementById('schedule-content');
-  if (!S.sched.length) {
+  if (!el) return;
+  const divs = getActiveDivs();
+  const hasAny = divs.some(div => S[div].sched.length > 0);
+  if (!hasAny) {
     el.innerHTML = `<div class="empty"><h3>No schedule yet</h3><p>Go to Teams tab and click Generate Schedule</p></div>`;
     return;
   }
   el.innerHTML = '';
 
-  // Group stage
-  const groupGames = S.sched.filter(g => activeCourt === 'all' || g.court === activeCourt);
-  if (groupGames.length) {
-    const sec = document.createElement('div');
-    sec.innerHTML = '<div class="sec-title">Pool Stage</div>';
-    const bySlot = {};
-    groupGames.forEach(g => { if (!bySlot[g.si]) bySlot[g.si] = []; bySlot[g.si].push(g); });
-    Object.keys(bySlot).sort((a, b) => a - b).forEach(si => {
-      const games = bySlot[si];
-      const block = document.createElement('div'); block.className = 'tblock';
-      block.innerHTML = `<div class="thdr"><span class="tlbl">${games[0].time}</span><div class="tline"></div></div>`;
-      games.forEach(g => {
-        const idx = S.sched.indexOf(g);
-        const done = isValidScore(parseInt(g.sa), parseInt(g.sb));
-        const pc = PILLS[(g.court-1) % 4];
-        const err = scoreError(g.sa, g.sb);
-        const wrap = document.createElement('div');
-        const row = document.createElement('div');
-        row.className = 'gc' + (done ? ' done' : '');
-        row.innerHTML = `
-          <span class="pill ${pc}">Court ${g.court}</span>
-          <span class="gt">${g.a}<span class="gtag">${g.gn}</span></span>
-          <span class="gvs">vs</span>
-          <span class="gt r">${g.b}</span>
-          <span class="sw">
-            ${admin
-              ? `<input class="si" type="number" min="0" max="99" placeholder="—" value="${g.sa}" onchange="setGS(${idx},'sa',this.value)"/>
-                 <span class="ssep">:</span>
-                 <input class="si" type="number" min="0" max="99" placeholder="—" value="${g.sb}" onchange="setGS(${idx},'sb',this.value)"/>`
-              : `<span class="ssep">${done ? `${g.sa} : ${g.sb}` : '— : —'}</span>`}
-          </span>`;
-        wrap.appendChild(row);
-        const errD = document.createElement('div');
-        errD.id = `gerr-${idx}`; errD.className = 'score-err';
-        errD.style.display = err ? 'block' : 'none'; errD.textContent = err || '';
-        wrap.appendChild(errD);
-        block.appendChild(wrap);
-      });
-      sec.appendChild(block);
-    });
-    el.appendChild(sec);
-  }
+  divs.forEach(div => {
+    const DS = S[div];
+    if (!DS.sched.length && !DS.ko.length) return;
 
-  // KO stage
-  if (S.ko.length) {
-    const koGames = S.ko.flatMap((r, ri) => r.map((g, gi) => ({...g, ri, gi})))
-      .filter(g => activeCourt === 'all' || g.court === activeCourt);
-    if (koGames.length) {
+    const divSec = document.createElement('div');
+
+    if (activeDiv === 'all') {
+      const dh = document.createElement('div');
+      dh.className = 'div-section-header';
+      dh.textContent = div === 'women' ? 'WOMEN' : 'MEN';
+      divSec.appendChild(dh);
+    }
+
+    // Pool stage
+    const groupGames = DS.sched.filter(g => activeCourt === 'all' || g.court === activeCourt);
+    if (groupGames.length) {
       const sec = document.createElement('div');
-      sec.innerHTML = '<div class="sec-title" style="margin-top:8px">Knockout Stage</div>';
-      const byRound = {};
-      koGames.forEach(g => { const k = `${g.ri}`; if (!byRound[k]) byRound[k] = []; byRound[k].push(g); });
-      Object.keys(byRound).sort((a, b) => a - b).forEach(ri => {
-        const games = byRound[ri];
-        const rn = getKORoundName(parseInt(ri));
+      sec.innerHTML = '<div class="sec-title">Pool Stage</div>';
+      const bySlot = {};
+      groupGames.forEach(g => { if (!bySlot[g.si]) bySlot[g.si] = []; bySlot[g.si].push(g); });
+      Object.keys(bySlot).sort((a,b) => a-b).forEach(si => {
+        const games = bySlot[si];
         const block = document.createElement('div'); block.className = 'tblock';
-        block.innerHTML = `<div class="thdr"><span class="tlbl">${games[0].time}</span><div class="tline"></div><span class="rtag">${rn}</span></div>`;
+        block.innerHTML = `<div class="thdr"><span class="tlbl">${games[0].time}</span><div class="tline"></div></div>`;
         games.forEach(g => {
-          const pc = PILLS[(g.court-1) % 4];
+          const idx = DS.sched.indexOf(g);
           const done = isValidScore(parseInt(g.sa), parseInt(g.sb));
+          const pc = PILLS[(g.court-1) % 4];
           const err = scoreError(g.sa, g.sb);
           const wrap = document.createElement('div');
           const row = document.createElement('div');
           row.className = 'gc' + (done ? ' done' : '');
           row.innerHTML = `
             <span class="pill ${pc}">Court ${g.court}</span>
-            <span class="gt">${g.a}</span>
+            <span class="gt">${g.a}<span class="gtag">${g.gn}</span></span>
             <span class="gvs">vs</span>
             <span class="gt r">${g.b}</span>
             <span class="sw">
               ${admin
-                ? `<input class="si" type="number" min="0" placeholder="—" value="${g.sa}" onchange="setKS(${g.ri},${g.gi},'sa',this.value)"/>
+                ? `<input class="si" type="number" min="0" max="99" placeholder="—" value="${g.sa}" onchange="setGS('${div}',${idx},'sa',this.value)"/>
                    <span class="ssep">:</span>
-                   <input class="si" type="number" min="0" placeholder="—" value="${g.sb}" onchange="setKS(${g.ri},${g.gi},'sb',this.value)"/>`
+                   <input class="si" type="number" min="0" max="99" placeholder="—" value="${g.sb}" onchange="setGS('${div}',${idx},'sb',this.value)"/>`
                 : `<span class="ssep">${done ? `${g.sa} : ${g.sb}` : '— : —'}</span>`}
             </span>`;
           wrap.appendChild(row);
           const errD = document.createElement('div');
-          errD.id = `kerr-${g.ri}-${g.gi}`; errD.className = 'score-err';
+          errD.id = `gerr-${div}-${idx}`; errD.className = 'score-err';
           errD.style.display = err ? 'block' : 'none'; errD.textContent = err || '';
           wrap.appendChild(errD);
           block.appendChild(wrap);
         });
         sec.appendChild(block);
       });
-      el.appendChild(sec);
+      divSec.appendChild(sec);
     }
-  }
+
+    // KO stage
+    if (DS.ko.length) {
+      const koGames = DS.ko.flatMap((r, ri) => r.map((g, gi) => ({...g, ri, gi})))
+        .filter(g => activeCourt === 'all' || g.court === activeCourt);
+      if (koGames.length) {
+        const sec = document.createElement('div');
+        sec.innerHTML = '<div class="sec-title" style="margin-top:8px">Knockout Stage</div>';
+        const byRound = {};
+        koGames.forEach(g => { const k = `${g.ri}`; if (!byRound[k]) byRound[k] = []; byRound[k].push(g); });
+        Object.keys(byRound).sort((a,b) => a-b).forEach(ri => {
+          const games = byRound[ri];
+          const rn = getKORoundName(div, parseInt(ri));
+          const block = document.createElement('div'); block.className = 'tblock';
+          block.innerHTML = `<div class="thdr"><span class="tlbl">${games[0].time}</span><div class="tline"></div><span class="rtag">${rn}</span></div>`;
+          games.forEach(g => {
+            const pc = PILLS[(g.court-1) % 4];
+            const done = isValidScore(parseInt(g.sa), parseInt(g.sb));
+            const err = scoreError(g.sa, g.sb);
+            const wrap = document.createElement('div');
+            const row = document.createElement('div');
+            row.className = 'gc' + (done ? ' done' : '');
+            row.innerHTML = `
+              <span class="pill ${pc}">Court ${g.court}</span>
+              <span class="gt">${g.a}</span>
+              <span class="gvs">vs</span>
+              <span class="gt r">${g.b}</span>
+              <span class="sw">
+                ${admin
+                  ? `<input class="si" type="number" min="0" placeholder="—" value="${g.sa}" onchange="setKS('${div}',${g.ri},${g.gi},'sa',this.value)"/>
+                     <span class="ssep">:</span>
+                     <input class="si" type="number" min="0" placeholder="—" value="${g.sb}" onchange="setKS('${div}',${g.ri},${g.gi},'sb',this.value)"/>`
+                  : `<span class="ssep">${done ? `${g.sa} : ${g.sb}` : '— : —'}</span>`}
+              </span>`;
+            wrap.appendChild(row);
+            const errD = document.createElement('div');
+            errD.id = `kerr-${div}-${g.ri}-${g.gi}`; errD.className = 'score-err';
+            errD.style.display = err ? 'block' : 'none'; errD.textContent = err || '';
+            wrap.appendChild(errD);
+            block.appendChild(wrap);
+          });
+          sec.appendChild(block);
+        });
+        divSec.appendChild(sec);
+      }
+    }
+
+    el.appendChild(divSec);
+  });
 }
 
 // ============ KO UPDATE ============
@@ -691,10 +873,27 @@ function getKOWinner(game) {
   return null;
 }
 
-function updateKO() {
-  if (!S.ko.length) return;
-  const adv = S.cfg.advPerGroup;
-  const ng = S.groups.length;
+function resolvePoolSeed(div, seed) {
+  const DS = S[div];
+  const m = String(seed || '').match(/^([A-Z])(\d+)$/);
+  if (!m) return { label: seed || 'TBD', known: false };
+  const gi = m[1].charCodeAt(0) - 65;
+  const rank = parseInt(m[2], 10);
+  if (gi < 0 || gi >= DS.groups.length) return { label: seed, known: false };
+  const grp = DS.groups[gi];
+  const totalGames = (grp.teams.length * (grp.teams.length - 1)) / 2;
+  const doneCnt = DS.sched.filter(g => g.gi === gi && isValidScore(parseInt(g.sa), parseInt(g.sb))).length;
+  if (doneCnt !== totalGames) return { label: seed, known: false };
+  const st = getStandings(div, gi);
+  if (!st[rank-1]) return { label: seed, known: false };
+  return { label: st[rank-1].name, known: true };
+}
+
+function updateKOForDiv(div) {
+  const DS = S[div];
+  if (!DS.ko.length) return;
+  const adv = DS.cfg.advPerGroup;
+  const ng = DS.groups.length;
 
   const koSeeds = [];
   for (let rank = 1; rank <= adv; rank++)
@@ -702,110 +901,87 @@ function updateKO() {
       koSeeds.push(`${String.fromCharCode(65+g)}${rank}`);
   const nKO = koSeeds.length;
   const paired = [];
-  for (let i = 0; i < nKO / 2; i++) paired.push([koSeeds[i], koSeeds[nKO-1-i]]);
+  for (let i = 0; i < Math.floor(nKO / 2); i++) paired.push([koSeeds[i], koSeeds[nKO-1-i]]);
 
-  // Fill first KO round from pool standings
-  if (S.ko[0]) {
+  if (DS.ko[0]) {
     paired.forEach(([sA, sB], i) => {
-      if (!S.ko[0][i]) return;
-      const rA = resolvePoolSeed(sA);
-      const rB = resolvePoolSeed(sB);
-      S.ko[0][i].a = rA.known ? rA.label : sA;
-      S.ko[0][i].b = rB.known ? rB.label : sB;
-      S.ko[0][i].seedA = sA;
-      S.ko[0][i].seedB = sB;
+      if (!DS.ko[0][i]) return;
+      const rA = resolvePoolSeed(div, sA);
+      const rB = resolvePoolSeed(div, sB);
+      DS.ko[0][i].a = rA.known ? rA.label : sA;
+      DS.ko[0][i].b = rB.known ? rB.label : sB;
+      DS.ko[0][i].seedA = sA;
+      DS.ko[0][i].seedB = sB;
     });
   }
 
-  // Fill subsequent rounds from previous round winners
-  for (let ri = 1; ri < S.ko.length; ri++) {
-    S.ko[ri].forEach((g, gi) => {
-      const wa = getKOWinner(S.ko[ri-1][gi*2]);
-      const wb = getKOWinner(S.ko[ri-1][gi*2+1]);
-      const rndName = getKORoundName(ri-1);
+  for (let ri = 1; ri < DS.ko.length; ri++) {
+    DS.ko[ri].forEach((g, gi) => {
+      const wa = getKOWinner(DS.ko[ri-1][gi*2]);
+      const wb = getKOWinner(DS.ko[ri-1][gi*2+1]);
+      const rndName = getKORoundName(div, ri-1);
       g.a = wa || `Winner of ${rndName} ${gi*2+1}`;
       g.b = wb || `Winner of ${rndName} ${gi*2+2}`;
     });
   }
 }
 
-function resolvePoolSeed(seed) {
-  const m = String(seed || '').match(/^([A-Z])(\d+)$/);
-  if (!m) return { label: seed || 'TBD', known: false };
-  const gLetter = m[1];
-  const rank = parseInt(m[2], 10);
-  const gi = gLetter.charCodeAt(0) - 65;
-  if (gi < 0 || gi >= S.groups.length) return { label: seed, known: false };
-  const grp = S.groups[gi];
-  const totalGames = (grp.teams.length * (grp.teams.length - 1)) / 2;
-  const doneCnt = S.sched.filter(g => g.gi === gi && isValidScore(parseInt(g.sa), parseInt(g.sb))).length;
-  const st = getStandings(gi);
-  if (doneCnt !== totalGames || !st[rank-1]) return { label: seed, known: false };
-  return { label: st[rank-1].name, known: true };
+function updateKO() {
+  getActiveDivs().forEach(div => updateKOForDiv(div));
 }
 
-function getKORoundName(ri) {
-  if (!S.ko[ri]) return '';
-  const teamsInRound = S.ko[ri].length * 2;
-  if (teamsInRound === 2)  return 'Final';
-  if (teamsInRound === 4)  return 'Semifinals';
-  if (teamsInRound === 8)  return 'Quarterfinals';
-  if (teamsInRound === 16) return 'Round of 16';
-  if (teamsInRound === 32) return 'Round of 32';
-  return `Round of ${teamsInRound}`;
-}
+// ============ BRACKET ============
+const BASE = 52;
 
-function getKOSeedPairForMatch(matchIndex) {
-  const adv = S.cfg.advPerGroup || 1;
-  const ng = S.groups.length;
+function renderBracketForDiv(div, container) {
+  const DS = S[div];
+
+  if (activeDiv === 'all') {
+    const hdr = document.createElement('div');
+    hdr.className = 'div-section-header';
+    hdr.textContent = div === 'women' ? 'WOMEN' : 'MEN';
+    container.appendChild(hdr);
+  }
+
+  const done = DS.sched.filter(g => isValidScore(parseInt(g.sa), parseInt(g.sb))).length;
+  const total = DS.sched.length;
+  const info = document.createElement('div');
+  info.className = 'binfo';
+  info.innerHTML = !total
+    ? 'Generate the schedule first to see the knockout bracket.'
+    : `Pool stage: <span>${done}/${total} games played</span> — bracket updates live as scores are entered`;
+  container.appendChild(info);
+
+  if (!DS.ko.length) return;
+
+  const adv = DS.cfg.advPerGroup || 0;
+  const ng = DS.groups.length;
   const koSeeds = [];
   for (let rank = 1; rank <= adv; rank++)
     for (let g = 0; g < ng; g++)
       koSeeds.push(`${String.fromCharCode(65+g)}${rank}`);
   const nKO = koSeeds.length;
-  if (!nKO) return ['TBD', 'TBD'];
-  return [koSeeds[matchIndex], koSeeds[nKO-1-matchIndex]];
-}
+  const seedPairs = [];
+  for (let i = 0; i < Math.floor(nKO / 2); i++) seedPairs.push([koSeeds[i], koSeeds[nKO-1-i]]);
 
-// ============ BRACKET ============
-const base = 52;
+  const scroll = document.createElement('div');
+  scroll.className = 'bscroll';
+  const tree = document.createElement('div');
+  tree.className = 'btree';
+  scroll.appendChild(tree);
 
-function renderBracket() {
-  const tree = document.getElementById('btree');
-  const champDiv = document.getElementById('champ-div');
-  const info = document.getElementById('binfo');
-  tree.innerHTML = ''; champDiv.innerHTML = '';
-
-  const done = S.sched.filter(g => isValidScore(parseInt(g.sa), parseInt(g.sb))).length;
-  const total = S.sched.length;
-  info.innerHTML = !total
-    ? 'Generate the schedule first to see the knockout bracket.'
-    : `Pool stage: <span>${done}/${total} games played</span> — bracket updates live as scores are entered`;
-
-  if (!S.ko.length) return;
-
-  const adv = S.cfg.advPerGroup || 0;
-  const ng = S.groups.length;
-  const koSeeds2 = [];
-  for (let rank = 1; rank <= adv; rank++)
-    for (let g = 0; g < ng; g++)
-      koSeeds2.push(`${String.fromCharCode(65+g)}${rank}`);
-  const nKO2 = koSeeds2.length;
-  const seedPairs2 = [];
-  for (let i = 0; i < nKO2 / 2; i++) seedPairs2.push([koSeeds2[i], koSeeds2[nKO2-1-i]]);
-
-  // Pool column
+  // Pool seedings column
   const seedsCol = document.createElement('div');
   seedsCol.className = 'bround';
   seedsCol.innerHTML = '<div class="brnd-title">Pool</div>';
   const seedMatches = document.createElement('div');
   seedMatches.className = 'brnd-matches';
-  seedPairs2.forEach((pair, pi) => {
+  seedPairs.forEach((pair, pi) => {
     const wrap = document.createElement('div');
     wrap.className = 'bmatch-wrap';
     if (pi > 0) wrap.style.marginTop = '10px';
-    const seedA = resolvePoolSeed(pair[0]);
-    const seedB = resolvePoolSeed(pair[1]);
+    const seedA = resolvePoolSeed(div, pair[0]);
+    const seedB = resolvePoolSeed(div, pair[1]);
     const nameA = seedA.known ? seedA.label : pair[0];
     const nameB = seedB.known ? seedB.label : pair[1];
     wrap.innerHTML = `<div class="bmatch-box"><div class="bmatch bseed">
@@ -818,13 +994,13 @@ function renderBracket() {
   tree.appendChild(seedsCol);
 
   // KO rounds
-  S.ko.forEach((round, ri) => {
+  DS.ko.forEach((round, ri) => {
     const col = document.createElement('div');
     col.className = 'bround';
-    col.innerHTML = `<div class="brnd-title">${getKORoundName(ri)}</div>`;
+    col.innerHTML = `<div class="brnd-title">${getKORoundName(div, ri)}</div>`;
     const matchesEl = document.createElement('div');
     matchesEl.className = 'brnd-matches';
-    const spacer = ri === 0 ? 10 : (Math.pow(2,ri)-1)*base + (Math.pow(2,ri-1)-1)*10;
+    const spacer = ri === 0 ? 10 : (Math.pow(2,ri)-1)*BASE + (Math.pow(2,ri-1)-1)*10;
 
     round.forEach((g, gi) => {
       const wrap = document.createElement('div');
@@ -838,19 +1014,18 @@ function renderBracket() {
       let labelA, labelB, codeA = '', codeB = '', knownA = false, knownB = false;
 
       if (ri === 0) {
-        const pair = getKOSeedPairForMatch(gi);
-        const seedA = resolvePoolSeed(pair[0]);
-        const seedB = resolvePoolSeed(pair[1]);
+        const pair = gi < seedPairs.length ? seedPairs[gi] : [g.seedA||'TBD', g.seedB||'TBD'];
+        const seedA = resolvePoolSeed(div, pair[0]);
+        const seedB = resolvePoolSeed(div, pair[1]);
         labelA = seedA.known ? seedA.label : pair[0];
         labelB = seedB.known ? seedB.label : pair[1];
         codeA = seedA.known ? pair[0] : '';
         codeB = seedB.known ? pair[1] : '';
-        knownA = seedA.known;
-        knownB = seedB.known;
+        knownA = seedA.known; knownB = seedB.known;
       } else {
-        const sourceRound = getKORoundName(ri-1);
-        labelA = g.a && !g.a.startsWith('Winner of') ? g.a : `Winner of ${sourceRound} ${gi*2+1}`;
-        labelB = g.b && !g.b.startsWith('Winner of') ? g.b : `Winner of ${sourceRound} ${gi*2+2}`;
+        const srcRound = getKORoundName(div, ri-1);
+        labelA = g.a && !g.a.startsWith('Winner of') ? g.a : `Winner of ${srcRound} ${gi*2+1}`;
+        labelB = g.b && !g.b.startsWith('Winner of') ? g.b : `Winner of ${srcRound} ${gi*2+2}`;
         knownA = !!(g.a && !g.a.startsWith('Winner of'));
         knownB = !!(g.b && !g.b.startsWith('Winner of'));
       }
@@ -876,37 +1051,46 @@ function renderBracket() {
     tree.appendChild(col);
   });
 
+  container.appendChild(scroll);
+
   // Champion
-  const fin = S.ko[S.ko.length-1][0];
+  const fin = DS.ko[DS.ko.length-1][0];
   if (fin) {
-    const sa = parseInt(fin.sa), sb = parseInt(fin.sb);
-    if (isValidScore(sa, sb)) {
-      const w = sa > sb ? fin.a : fin.b;
-      champDiv.innerHTML = `<div class="champ-wrap"><div class="ci">🏆</div><h2>Champion</h2><div class="champ-name">${w}</div></div>`;
+    const fsa = parseInt(fin.sa), fsb = parseInt(fin.sb);
+    if (isValidScore(fsa, fsb)) {
+      const w = fsa > fsb ? fin.a : fin.b;
+      const champEl = document.createElement('div');
+      champEl.innerHTML = `<div class="champ-wrap"><div class="ci">&#9733; CHAMPION</div><div class="champ-name">${w}</div></div>`;
+      container.appendChild(champEl);
     }
   }
 }
 
+function renderBracket() {
+  const container = document.getElementById('bracket-container');
+  if (!container) return;
+  container.innerHTML = '';
+  getActiveDivs().forEach(div => renderBracketForDiv(div, container));
+}
+
 // ============ SETTINGS ============
 const SETT_LIMITS = {
-  numCouples: [4, 64], courts: [1, 8], numGroups: [2, 16],
-  advPerGroup: [1, 8], gameDur: [10, 120], breakDur: [0, 60]
+  numCouples:[4,64], courts:[1,8], numGroups:[2,16],
+  advPerGroup:[1,8], gameDur:[10,120], breakDur:[0,60]
 };
 
-function adjSetting(key, delta) {
+function adjSetting(div, key, delta) {
   if (!admin) return;
   const [mn, mx] = SETT_LIMITS[key];
-  S.cfg[key] = Math.min(mx, Math.max(mn, (S.cfg[key] || mn) + delta));
+  S[div].cfg[key] = Math.min(mx, Math.max(mn, (S[div].cfg[key] || mn) + delta));
   save(); renderSettings();
 }
 
-function updateTimeSetting(key, val) {
+function updateTimeSetting(div, key, val) {
   if (!admin) return;
-  S.cfg[key] = val; save(); renderSettings();
+  S[div].cfg[key] = val; save(); renderSettings();
 }
 
-// Distribute nc couples into ng groups as evenly as possible
-// Extra couples go to first groups
 function distributeGroups(nc, ng) {
   const base = Math.floor(nc / ng);
   const extra = nc % ng;
@@ -915,44 +1099,151 @@ function distributeGroups(nc, ng) {
   return sizes;
 }
 
-function renderSettings() {
-  const ng = S.cfg.numGroups || 8;
-  const nc = S.cfg.numCouples || 26;
-  ['numCouples','courts','numGroups','advPerGroup','gameDur','breakDur'].forEach(k => {
-    const el = document.getElementById('disp-'+k);
-    if (el) el.textContent = S.cfg[k];
-  });
-  const ti = document.getElementById('inp-startTime');
-  if (ti) ti.value = S.cfg.startTime;
-
+function renderSettingsForDiv(div) {
+  const cfg = S[div].cfg;
+  const ng = cfg.numGroups || 2;
+  const nc = cfg.numCouples || 10;
   const sizes = distributeGroups(nc, ng);
   const totalGroupGames = sizes.reduce((s, sz) => s + (sz * (sz-1)) / 2, 0);
-  const koTeams = Math.max(0, ng * (S.cfg.advPerGroup || 0));
-  const koGames = koTeams > 1 ? (koTeams - 1) : 0;
+  const koTeams = ng * (cfg.advPerGroup || 0);
+  let bracketSize = 1;
+  while (bracketSize < koTeams) bracketSize *= 2;
+  const koGames = bracketSize > 1 ? bracketSize - 1 : 0;
   const totalGames = totalGroupGames + koGames;
-  const slot = S.cfg.gameDur + S.cfg.breakDur;
-  const parallelSlots = 8;
-  const [sh, sm] = S.cfg.startTime.split(':').map(Number);
-  const endMins = sh*60 + sm + parallelSlots * slot + koGames * slot;
+  const slot = cfg.gameDur + cfg.breakDur;
+  const poolSlots = Math.ceil(totalGroupGames / (cfg.courts || 2));
+  const koSlots   = Math.ceil(koGames / (cfg.courts || 2));
+  const [sh, sm] = cfg.startTime.split(':').map(Number);
+  const endMins = sh*60 + sm + (poolSlots + koSlots) * slot;
   const endH = String(Math.floor(endMins/60)%24).padStart(2,'0');
   const endM = String(endMins%60).padStart(2,'0');
-  document.getElementById('sett-preview').innerHTML = `
-    <div class="sett-preview-grid">
-      <div class="prev-item"><div class="prev-label">Groups</div><div class="prev-val">${ng}</div></div>
-      <div class="prev-item"><div class="prev-label">Group games</div><div class="prev-val">${totalGroupGames}</div></div>
-      <div class="prev-item"><div class="prev-label">KO games</div><div class="prev-val">${koGames}</div></div>
-      <div class="prev-item"><div class="prev-label">Total games</div><div class="prev-val">${totalGames}</div></div>
-      <div class="prev-item"><div class="prev-label">Start</div><div class="prev-val">${S.cfg.startTime}</div></div>
-      <div class="prev-item accent"><div class="prev-label">Est. end</div><div class="prev-val">${endH}:${endM}</div></div>
+  const isQF  = nc === 10 && ng === 2;
+  const isR16 = nc === 12 && ng === 4;
+
+  const womenModeHTML = div === 'women' ? `
+    <div class="sett-card" style="margin-bottom:0">
+      <div class="sett-card-title">Women Format</div>
+      <div class="women-mode-row">
+        <button class="wmode-btn ${isQF ? 'on' : ''}" onclick="setWomenMode('qf')">10 Couples — Quarterfinals</button>
+        <button class="wmode-btn ${isR16 ? 'on' : ''}" onclick="setWomenMode('r16')">12 Couples — Round of 16</button>
+      </div>
+    </div>` : '';
+
+  return `${womenModeHTML}
+    <div class="sett-grid">
+      <div class="sett-card">
+        <div class="sett-card-title">Tournament Format</div>
+        <div class="sett-row">
+          <div class="sett-label">
+            <span class="sett-name">Number of couples</span>
+            <span class="sett-desc">Total couples. Pools are distributed automatically.</span>
+          </div>
+          <div class="sett-ctrl">
+            <button class="num-btn" onclick="adjSetting('${div}','numCouples',-1)">−</button>
+            <span class="num-val">${cfg.numCouples}</span>
+            <button class="num-btn" onclick="adjSetting('${div}','numCouples',1)">+</button>
+          </div>
+        </div>
+        <div class="sett-row">
+          <div class="sett-label">
+            <span class="sett-name">Number of groups</span>
+            <span class="sett-desc">How many pools to divide couples into.</span>
+          </div>
+          <div class="sett-ctrl">
+            <button class="num-btn" onclick="adjSetting('${div}','numGroups',-1)">−</button>
+            <span class="num-val">${cfg.numGroups}</span>
+            <button class="num-btn" onclick="adjSetting('${div}','numGroups',1)">+</button>
+          </div>
+        </div>
+        <div class="sett-row">
+          <div class="sett-label">
+            <span class="sett-name">Teams advancing per pool</span>
+            <span class="sett-desc">How many advance to the knockout stage.</span>
+          </div>
+          <div class="sett-ctrl">
+            <button class="num-btn" onclick="adjSetting('${div}','advPerGroup',-1)">−</button>
+            <span class="num-val">${cfg.advPerGroup}</span>
+            <button class="num-btn" onclick="adjSetting('${div}','advPerGroup',1)">+</button>
+          </div>
+        </div>
+      </div>
+      <div class="sett-card">
+        <div class="sett-card-title">Time Settings</div>
+        <div class="sett-row">
+          <div class="sett-label">
+            <span class="sett-name">Start time</span>
+            <span class="sett-desc">When the first game of the day begins.</span>
+          </div>
+          <div class="sett-ctrl">
+            <input type="time" class="time-inp" value="${cfg.startTime}" onchange="updateTimeSetting('${div}','startTime',this.value)" />
+          </div>
+        </div>
+        <div class="sett-row">
+          <div class="sett-label">
+            <span class="sett-name">Game duration (min)</span>
+            <span class="sett-desc">Allocated time per game including transition.</span>
+          </div>
+          <div class="sett-ctrl">
+            <button class="num-btn" onclick="adjSetting('${div}','gameDur',-5)">−</button>
+            <span class="num-val">${cfg.gameDur}</span>
+            <button class="num-btn" onclick="adjSetting('${div}','gameDur',5)">+</button>
+          </div>
+        </div>
+        <div class="sett-row">
+          <div class="sett-label">
+            <span class="sett-name">Break between games (min)</span>
+            <span class="sett-desc">Extra buffer between games on the same court.</span>
+          </div>
+          <div class="sett-ctrl">
+            <button class="num-btn" onclick="adjSetting('${div}','breakDur',-5)">−</button>
+            <span class="num-val">${cfg.breakDur}</span>
+            <button class="num-btn" onclick="adjSetting('${div}','breakDur',5)">+</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sett-preview">
+      <div class="sett-preview-grid">
+        <div class="prev-item"><div class="prev-label">Groups</div><div class="prev-val">${ng}</div></div>
+        <div class="prev-item"><div class="prev-label">Group games</div><div class="prev-val">${totalGroupGames}</div></div>
+        <div class="prev-item"><div class="prev-label">KO games</div><div class="prev-val">${koGames}</div></div>
+        <div class="prev-item"><div class="prev-label">Total games</div><div class="prev-val">${totalGames}</div></div>
+        <div class="prev-item"><div class="prev-label">Start</div><div class="prev-val">${cfg.startTime}</div></div>
+        <div class="prev-item accent"><div class="prev-label">Est. end</div><div class="prev-val">${endH}:${endM}</div></div>
+      </div>
+    </div>
+    <button class="gen-btn" onclick="applySettings('${div}')">Apply &amp; Regenerate Schedule</button>
+    <div class="sett-danger">
+      <div class="sett-card-title" style="color:var(--red)">Danger Zone</div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Reset ALL scores and regenerate everything from scratch.</p>
+      <button class="danger-btn" onclick="resetAll('${div}')">Reset tournament &amp; clear all scores</button>
     </div>`;
 }
 
-function applySettings() {
+function renderSettings() {
+  const container = document.getElementById('settings-container');
+  if (!container) return;
+  container.innerHTML = '';
+  getActiveDivs().forEach(div => {
+    if (activeDiv === 'all') {
+      const hdr = document.createElement('div');
+      hdr.className = 'div-section-header';
+      hdr.textContent = div === 'women' ? 'WOMEN' : 'MEN';
+      container.appendChild(hdr);
+    }
+    const sec = document.createElement('div');
+    sec.innerHTML = renderSettingsForDiv(div);
+    container.appendChild(sec);
+  });
+}
+
+function applySettings(div) {
   if (!admin) return;
-  const ng = S.cfg.numGroups || 8;
-  const nc = S.cfg.numCouples || 26;
-  S.cfg.advPerGroup = Math.min(Math.max(S.cfg.advPerGroup || 1, 1), 4);
-  const allTeams = S.groups.flatMap(g => g.teams).filter(t => t && t !== 'TBD / TBD');
+  const cfg = S[div].cfg;
+  const ng = cfg.numGroups || 2;
+  const nc = cfg.numCouples || 10;
+  cfg.advPerGroup = Math.min(Math.max(cfg.advPerGroup || 1, 1), 4);
+  const allTeams = S[div].groups.flatMap(g => g.teams).filter(t => t && t !== 'TBD / TBD');
   while (allTeams.length < nc) allTeams.push('TBD / TBD');
   const trimmed = allTeams.slice(0, nc);
   const sizes = distributeGroups(nc, ng);
@@ -962,24 +1253,40 @@ function applySettings() {
     newGroups.push({ name: String.fromCharCode(65+g), teams: trimmed.slice(idx, idx + sizes[g]) });
     idx += sizes[g];
   }
-  S.groups = newGroups; S.sched = []; S.ko = [];
-  save(); generateSchedule();
+  S[div].groups = newGroups; S[div].sched = []; S[div].ko = [];
+  generateScheduleForDiv(div);
+  save(); goPage('schedule');
 }
 
-function resetAll() {
+function resetAll(div) {
   if (!admin) return;
   if (!confirm('Reset all scores and regenerate the full schedule?')) return;
-  S.sched.forEach(g => { g.sa = ''; g.sb = ''; });
-  S.ko.forEach(r => r.forEach(g => { g.sa = ''; g.sb = ''; }));
-  save(); generateSchedule();
+  S[div].sched.forEach(g => { g.sa = ''; g.sb = ''; });
+  S[div].ko.forEach(r => r.forEach(g => { g.sa = ''; g.sb = ''; }));
+  generateScheduleForDiv(div);
+  save(); rerender();
+}
+
+function setWomenMode(mode) {
+  if (!admin) return;
+  if (mode === 'qf') {
+    S.women.cfg.numCouples = 10;
+    S.women.cfg.numGroups  = 2;
+    S.women.cfg.advPerGroup = 4;
+  } else if (mode === 'r16') {
+    S.women.cfg.numCouples = 12;
+    S.women.cfg.numGroups  = 4;
+    S.women.cfg.advPerGroup = 3;
+  }
+  save(); renderSettings();
 }
 
 // ============ EXPOSE GLOBALS ============
 Object.assign(window, {
-  adminClick, tryLogin, closeLogin, goPage,
-  openEdit, closeEdit, saveEdit, addTeam, deleteTeam,
+  adminClick, tryLogin, closeLogin, goPage, setDiv,
+  openEdit, closeEdit, saveEdit, addTeam, deleteTeam, filterTeams,
   generateSchedule, setGS, setKS, setCourt,
-  adjSetting, updateTimeSetting, applySettings, resetAll
+  adjSetting, updateTimeSetting, applySettings, resetAll, setWomenMode
 });
 
 // ============ BOOT ============
