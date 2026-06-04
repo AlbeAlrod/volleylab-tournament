@@ -21,9 +21,9 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
-const WOMEN_REF = doc(db, "tournaments", "women4");
-const MEN_REF   = doc(db, "tournaments", "men4");
-const STORE = 'vl25b_v5';
+const WOMEN_REF = doc(db, "tournaments", "women5");
+const MEN_REF   = doc(db, "tournaments", "men5");
+const STORE = 'vl25b_v6';
 
 let firebaseReady = false;
 let applyingRemoteState = false;
@@ -140,7 +140,7 @@ const PILLS = ['p1','p2','p3','p4'];
 const PW = 'volleylab';
 
 const DEF_CFG_WOMEN = { numCouples:10, courts:2, numGroups:2, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:0 };
-const DEF_CFG_MEN   = { numCouples:16, courts:2, numGroups:4, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:2 };
+const DEF_CFG_MEN   = { numCouples:16, courts:2, numGroups:4, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:0 };
 
 // Hebrew names, English UI — flat rosters (used for draw)
 const DEFAULT_WOMEN_ROSTER = [
@@ -661,7 +661,9 @@ function estimateEnd(div) {
 
 // After women's schedule is built, chain men's start time to women's end
 function chainMenAfterWomen() {
-  S.men.cfg.startTime = estimateEnd('women');
+  S.men.cfg.startTime  = estimateEnd('women');
+  S.men.cfg.courtOffset = 0;  // sequential — reuse same courts after women finish
+  S.men.cfg.courts      = Math.max(1, Math.min(S.men.cfg.courts, 4)); // cap at 4
 }
 
 // ============ SCHEDULE SEARCH ============
@@ -1037,7 +1039,7 @@ function renderScheduleContent() {
   const hasAny = divs.some(div => S[div].sched.length > 0);
 
   if (!hasAny) {
-    el.innerHTML = `<div class="empty"><h3>No schedule yet</h3><p>Go to Teams tab and click Generate Schedule</p></div>`;
+    el.innerHTML = `<div class="empty"><h3>No schedule yet</h3><p>Go to Couples and draw the schedule first</p></div>`;
     return;
   }
 
@@ -1050,125 +1052,49 @@ function renderScheduleContent() {
 
   el.innerHTML = '';
 
-  // ── UNIFIED view when All + no search filter ──────────────────────────
-  if (activeDiv === 'all' && !schedFilter) {
-    // Collect ALL pool games from both divisions, tagged with div
-    const allPool = [];
-    divs.forEach(div => {
-      S[div].sched
-        .filter(g => activeCourt === 'all' || g.court === activeCourt)
-        .forEach(g => allPool.push({...g, _div: div, _idx: S[div].sched.indexOf(g)}));
-    });
+  // ── Collect ALL games (pool + KO) from active divs into one timeline ──
+  const allGames = [];
 
-    if (allPool.length) {
-      const sec = document.createElement('div');
-      sec.innerHTML = '<div class="sec-title">Pool Stage</div>';
-      // Group by time string (both divs share same start time & slot duration)
-      const byTime = {};
-      allPool.forEach(g => {
-        if (!byTime[g.time]) byTime[g.time] = [];
-        byTime[g.time].push(g);
-      });
-      Object.keys(byTime).sort((a,b) => t2m(a)-t2m(b)).forEach(time => {
-        const games = byTime[time];
-        const block = document.createElement('div'); block.className = 'tblock';
-        block.innerHTML = `<div class="thdr"><span class="tlbl">${time}</span><div class="tline"></div></div>`;
-        games.forEach(g => block.appendChild(buildGameRow(g._div, g, g._idx, false)));
-        sec.appendChild(block);
-      });
-      el.appendChild(sec);
-    }
+  divs.forEach(div => {
+    const DS = S[div];
+    // Pool games
+    DS.sched
+      .filter(g => (activeCourt === 'all' || g.court === activeCourt) &&
+                   (!schedFilter || g.a === schedFilter || g.b === schedFilter))
+      .forEach(g => allGames.push({ ...g, _div: div, _idx: DS.sched.indexOf(g), _isKO: false, _rn: null }));
+    // KO games
+    DS.ko.flatMap((r, ri) => r.map((g, gi) => ({ ...g, ri, gi })))
+      .filter(g => (activeCourt === 'all' || g.court === activeCourt) &&
+                   (!schedFilter || g.a === schedFilter || g.b === schedFilter))
+      .forEach(g => allGames.push({ ...g, _div: div, _idx: -1, _isKO: true, _rn: getKORoundName(div, g.ri) }));
+  });
 
-    // Collect ALL KO games from both divisions
-    const allKO = [];
-    divs.forEach(div => {
-      S[div].ko.flatMap((r, ri) => r.map((g, gi) => ({...g, ri, gi, _div: div})))
-        .filter(g => activeCourt === 'all' || g.court === activeCourt)
-        .forEach(g => allKO.push(g));
-    });
-
-    if (allKO.length) {
-      const sec = document.createElement('div');
-      sec.innerHTML = '<div class="sec-title" style="margin-top:8px">Knockout Stage</div>';
-      const byTime = {};
-      allKO.forEach(g => {
-        if (!byTime[g.time]) byTime[g.time] = [];
-        byTime[g.time].push(g);
-      });
-      Object.keys(byTime).sort((a,b) => t2m(a)-t2m(b)).forEach(time => {
-        const games = byTime[time];
-        // Round label: use the first game's round name
-        const rn = getKORoundName(games[0]._div, games[0].ri);
-        const block = document.createElement('div'); block.className = 'tblock';
-        block.innerHTML = `<div class="thdr"><span class="tlbl">${time}</span><div class="tline"></div><span class="rtag">${rn}</span></div>`;
-        games.forEach(g => block.appendChild(buildGameRow(g._div, g, -1, true)));
-        sec.appendChild(block);
-      });
-      el.appendChild(sec);
-    }
-
-    if (!el.children.length)
-      el.innerHTML = `<div class="empty"><h3>No schedule yet</h3><p>Go to Teams tab and click Generate Schedule</p></div>`;
+  if (!allGames.length) {
+    el.innerHTML = schedFilter
+      ? `<div class="empty"><h3>No games yet</h3><p>Generate the schedule first, then search will show results here.</p></div>`
+      : `<div class="empty"><h3>No schedule yet</h3><p>Go to Couples and draw the schedule first</p></div>`;
     return;
   }
 
-  // ── Per-division view (Women / Men filter, or search active) ──────────
-  divs.forEach(div => {
-    const DS = S[div];
-    if (!DS.sched.length && !DS.ko.length) return;
-
-    const divSec = document.createElement('div');
-
-    // Pool stage
-    const groupGames = DS.sched.filter(g =>
-      (activeCourt === 'all' || g.court === activeCourt) &&
-      (!schedFilter || g.a === schedFilter || g.b === schedFilter)
-    );
-    if (groupGames.length) {
-      const sec = document.createElement('div');
-      sec.innerHTML = '<div class="sec-title">Pool Stage</div>';
-      const bySlot = {};
-      groupGames.forEach(g => { if (!bySlot[g.si]) bySlot[g.si] = []; bySlot[g.si].push(g); });
-      Object.keys(bySlot).sort((a,b) => a-b).forEach(si => {
-        const games = bySlot[si];
-        const block = document.createElement('div'); block.className = 'tblock';
-        block.innerHTML = `<div class="thdr"><span class="tlbl">${games[0].time}</span><div class="tline"></div></div>`;
-        games.forEach(g => block.appendChild(buildGameRow(div, g, DS.sched.indexOf(g), false)));
-        sec.appendChild(block);
-      });
-      divSec.appendChild(sec);
-    }
-
-    // KO stage
-    if (DS.ko.length) {
-      const koGames = DS.ko.flatMap((r, ri) => r.map((g, gi) => ({...g, ri, gi})))
-        .filter(g =>
-          (activeCourt === 'all' || g.court === activeCourt) &&
-          (!schedFilter || g.a === schedFilter || g.b === schedFilter)
-        );
-      if (koGames.length) {
-        const sec = document.createElement('div');
-        sec.innerHTML = '<div class="sec-title" style="margin-top:8px">Knockout Stage</div>';
-        const byRound = {};
-        koGames.forEach(g => { const k = `${g.ri}`; if (!byRound[k]) byRound[k] = []; byRound[k].push(g); });
-        Object.keys(byRound).sort((a,b) => a-b).forEach(ri => {
-          const games = byRound[ri];
-          const rn = getKORoundName(div, parseInt(ri));
-          const block = document.createElement('div'); block.className = 'tblock';
-          block.innerHTML = `<div class="thdr"><span class="tlbl">${games[0].time}</span><div class="tline"></div><span class="rtag">${rn}</span></div>`;
-          games.forEach(g => block.appendChild(buildGameRow(div, g, -1, true)));
-          sec.appendChild(block);
-        });
-        divSec.appendChild(sec);
-      }
-    }
-
-    if (divSec.children.length) el.appendChild(divSec);
+  // Group by time, sorted chronologically
+  const byTime = {};
+  allGames.forEach(g => {
+    const key = g.time || '00:00';
+    if (!byTime[key]) byTime[key] = [];
+    byTime[key].push(g);
   });
 
-  if (!el.children.length && schedFilter) {
-    el.innerHTML = `<div class="empty"><h3>No games yet</h3><p>Generate the schedule first, then search will show results here.</p></div>`;
-  }
+  Object.keys(byTime).sort((a, b) => t2m(a) - t2m(b)).forEach(time => {
+    const games = byTime[time];
+    // Round tag: if there are KO games in this slot, show the round name
+    const koGame = games.find(g => g._isKO);
+    const roundTag = koGame ? `<span class="rtag">${koGame._rn}</span>` : '';
+    const block = document.createElement('div');
+    block.className = 'tblock';
+    block.innerHTML = `<div class="thdr"><span class="tlbl">${time}</span><div class="tline"></div>${roundTag}</div>`;
+    games.forEach(g => block.appendChild(buildGameRow(g._div, g, g._idx, g._isKO)));
+    el.appendChild(block);
+  });
 }
 
 // ============ KO UPDATE ============
@@ -1368,7 +1294,7 @@ function renderBracket() {
 
 // ============ SETTINGS ============
 const SETT_LIMITS = {
-  numCouples:[4,64], courts:[1,8], numGroups:[2,16],
+  numCouples:[4,64], courts:[1,4], numGroups:[2,16],
   advPerGroup:[1,8], gameDur:[10,120], breakDur:[0,60]
 };
 
