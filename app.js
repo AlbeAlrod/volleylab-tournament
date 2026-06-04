@@ -138,10 +138,10 @@ onSnapshot(MEN_REF, snap => {
 // ============ CONSTANTS ============
 const PILLS = ['p1','p2','p3','p4'];
 // Passwords stored as SHA-256 hashes only — plain text never appears in code
-// מנהל = score entry only (level 1)
-const PW_HASH_SCORE = 'dad89b6388f49be8fecb08fe28bf955928865ff621e5e4b5d728a997fd28a844';
-// יוצר = full access (level 2)
-const PW_HASH_SUPER = '825ee8be70ffb4c3867dd7cf97055e10cb7adbc50e171507cff635965ad5d5fc';
+// admin = score entry only (level 1)
+const PW_HASH_SCORE = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918';
+// master = full access (level 2)
+const PW_HASH_SUPER = 'fc613b4dfd6736a7bd268c8a0e74ed0d1c04a959f59dd74ef2874983fd443fc9';
 
 const DEF_CFG_WOMEN = { numCouples:10, courts:2, numGroups:2, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:0 };
 const DEF_CFG_MEN   = { numCouples:16, courts:2, numGroups:4, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:0 };
@@ -307,12 +307,12 @@ function refreshA() {
   const coupEl = document.getElementById('page-couples');
   // Only level 2 (יוצר) gets the admin-mode CSS class (shows Settings/Couples tabs)
   document.body.classList.toggle('admin-mode', superAdmin);
-  if (txt)  txt.textContent  = adminLevel === 2 ? 'יוצר ✓' : adminLevel === 1 ? 'מנהל ✓' : 'Admin';
+  if (txt)  txt.textContent  = adminLevel === 2 ? 'Master ✓' : adminLevel === 1 ? 'Admin ✓' : 'Admin';
   if (btn)  btn.classList.toggle('on', admin);
   if (bar)  bar.className = 'mode-bar ' + (admin ? 'mode-admin' : 'mode-view');
   if (mtxt) mtxt.textContent =
-    adminLevel === 2 ? 'יוצר — גישה מלאה לכל ההגדרות והתוצאות' :
-    adminLevel === 1 ? 'מנהל — הזנת תוצאות בלבד' :
+    adminLevel === 2 ? 'Master mode — full access to all settings and scores' :
+    adminLevel === 1 ? 'Admin mode — score entry only' :
     'View only — tap Admin to manage the tournament';
   if (settEl && !superAdmin && settEl.classList.contains('on')) goPage('standings');
   if (coupEl && !superAdmin && coupEl.classList.contains('on')) goPage('standings');
