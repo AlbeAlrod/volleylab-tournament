@@ -138,6 +138,13 @@ onSnapshot(MEN_REF, snap => {
   S.men.sched = remote.sched;
   S.men.ko    = remote.ko;
   S.men.cfg   = remote.cfg;
+  // Normalize court offset — courts must be 1..nc, never offset beyond 4
+  if (S.men.cfg.courtOffset !== 0) {
+    const nc = Math.max(1, Math.min(S.men.cfg.courts || 2, 4));
+    S.men.cfg.courtOffset = 0;
+    S.men.sched.forEach(g => { g.court = (g.gi % nc) + 1; });
+    S.men.ko.forEach(round => round.forEach((g, gi) => { g.court = (gi % nc) + 1; }));
+  }
   localStorage.setItem(STORE, JSON.stringify(S));
   applyingRemoteState = false;
   renderAll(); setSyncStatus(true);
@@ -182,7 +189,7 @@ let S = {
 let activeDiv   = 'all';
 let editTarget  = null;
 let activeCourt = 'all';
-let schedFilter = '';   // team name filter on schedule page
+let schedFilter = [];   // team name filter on schedule page (array of matched team strings)
 let adminLevel = 0;   // 0 = viewer, 1 = admin (scores only), 2 = master (full access)
 let admin = false;    // adminLevel >= 1 — controls score inputs
 let superAdmin = false; // adminLevel >= 2 — controls everything else
@@ -375,7 +382,7 @@ function renderAll() {
 function setDiv(d) {
   activeDiv = d;
   activeCourt = 'all';
-  schedFilter = '';
+  schedFilter = [];
   const inp = document.getElementById('sched-search');
   if (inp) inp.value = '';
   renderDivFilter();
@@ -699,37 +706,39 @@ function estimateEnd(div) {
 
 // After women's schedule is built, chain men's start time to women's end
 function chainMenAfterWomen() {
-  S.men.cfg.startTime  = estimateEnd('women');
-  S.men.cfg.courtOffset = 0;  // sequential — reuse same courts after women finish
-  S.men.cfg.courts      = Math.max(1, Math.min(S.men.cfg.courts, 4)); // cap at 4
+  S.men.cfg.startTime   = estimateEnd('women');
+  S.men.cfg.courtOffset = 0;
+  S.men.cfg.courts      = Math.max(1, Math.min(S.men.cfg.courts, 4));
 }
 
 // ============ SCHEDULE SEARCH ============
 function filterTeams() { filterSchedule(); }   // alias kept for window export
+
+function teamMatchesQuery(team, query) {
+  return team.toLowerCase().replace(/\//g, ' ').split(/\s+/).filter(Boolean).some(w => w.startsWith(query));
+}
 
 function filterSchedule() {
   const inp = document.getElementById('sched-search');
   const query = (inp ? inp.value : '').trim().toLowerCase();
 
   if (!query) {
-    schedFilter = '';
+    schedFilter = [];
     renderScheduleContent();
     return;
   }
 
-  // Find first matching team across active divisions
   const divs = getActiveDivs();
-  let found = null;
-  outer:
+  const matched = [];
   for (const div of divs) {
     for (const grp of S[div].groups) {
       for (const t of grp.teams) {
-        if (t.toLowerCase().includes(query)) { found = t; break outer; }
+        if (teamMatchesQuery(t, query) && !matched.includes(t)) matched.push(t);
       }
     }
   }
 
-  schedFilter = found || '';
+  schedFilter = matched.length ? matched : ['__no_match__'];
   renderScheduleContent();
 }
 
@@ -1040,9 +1049,9 @@ function buildGameRow(div, g, idx, isKO) {
       <span class="gt r">${g.b}</span>
       <span class="sw">
         ${admin
-          ? `<input class="si" type="number" min="0" placeholder="—" value="${g.sa}" onchange="setKS('${div}',${g.ri},${g.gi},'sa',this.value)"/>
+          ? `<input class="si" type="number" min="0" inputmode="numeric" pattern="[0-9]*" placeholder="—" value="${g.sa}" onchange="setKS('${div}',${g.ri},${g.gi},'sa',this.value)"/>
              <span class="ssep">:</span>
-             <input class="si" type="number" min="0" placeholder="—" value="${g.sb}" onchange="setKS('${div}',${g.ri},${g.gi},'sb',this.value)"/>`
+             <input class="si" type="number" min="0" inputmode="numeric" pattern="[0-9]*" placeholder="—" value="${g.sb}" onchange="setKS('${div}',${g.ri},${g.gi},'sb',this.value)"/>`
           : `<span class="ssep">${done ? `${g.sa} : ${g.sb}` : '— : —'}</span>`}
       </span>`;
     const errD = document.createElement('div');
@@ -1057,9 +1066,9 @@ function buildGameRow(div, g, idx, isKO) {
       <span class="gt r">${g.b}</span>
       <span class="sw">
         ${admin
-          ? `<input class="si" type="number" min="0" max="99" placeholder="—" value="${g.sa}" onchange="setGS('${div}',${idx},'sa',this.value)"/>
+          ? `<input class="si" type="number" min="0" max="99" inputmode="numeric" pattern="[0-9]*" placeholder="—" value="${g.sa}" onchange="setGS('${div}',${idx},'sa',this.value)"/>
              <span class="ssep">:</span>
-             <input class="si" type="number" min="0" max="99" placeholder="—" value="${g.sb}" onchange="setGS('${div}',${idx},'sb',this.value)"/>`
+             <input class="si" type="number" min="0" max="99" inputmode="numeric" pattern="[0-9]*" placeholder="—" value="${g.sb}" onchange="setGS('${div}',${idx},'sb',this.value)"/>`
           : `<span class="ssep">${done ? `${g.sa} : ${g.sb}` : '— : —'}</span>`}
       </span>`;
     const errD = document.createElement('div');
@@ -1083,7 +1092,7 @@ function renderScheduleContent() {
 
   const inp = document.getElementById('sched-search');
   const rawQuery = inp ? inp.value.trim() : '';
-  if (rawQuery && !schedFilter) {
+  if (rawQuery && !schedFilter.length) {
     el.innerHTML = `<div class="empty"><h3>No match</h3><p>No couple found for "<strong>${rawQuery}</strong>"</p></div>`;
     return;
   }
@@ -1096,19 +1105,19 @@ function renderScheduleContent() {
   divs.forEach(div => {
     const DS = S[div];
     // Pool games
+    const sf = schedFilter;
+    const sfMatch = (a, b) => !sf.length || sf.includes(a) || sf.includes(b);
     DS.sched
-      .filter(g => (activeCourt === 'all' || g.court === activeCourt) &&
-                   (!schedFilter || g.a === schedFilter || g.b === schedFilter))
+      .filter(g => (activeCourt === 'all' || g.court === activeCourt) && sfMatch(g.a, g.b))
       .forEach(g => allGames.push({ ...g, _div: div, _idx: DS.sched.indexOf(g), _isKO: false, _rn: null }));
     // KO games
     DS.ko.flatMap((r, ri) => r.map((g, gi) => ({ ...g, ri, gi })))
-      .filter(g => (activeCourt === 'all' || g.court === activeCourt) &&
-                   (!schedFilter || g.a === schedFilter || g.b === schedFilter))
+      .filter(g => (activeCourt === 'all' || g.court === activeCourt) && sfMatch(g.a, g.b))
       .forEach(g => allGames.push({ ...g, _div: div, _idx: -1, _isKO: true, _rn: getKORoundName(div, g.ri) }));
   });
 
   if (!allGames.length) {
-    el.innerHTML = schedFilter
+    el.innerHTML = schedFilter.length
       ? `<div class="empty"><h3>No games yet</h3><p>Generate the schedule first, then search will show results here.</p></div>`
       : `<div class="empty"><h3>No schedule yet</h3><p>Go to Couples and draw the schedule first</p></div>`;
     return;
