@@ -83,10 +83,6 @@
     <h2>Tournament Teams</h2>
     <p>Pools — top teams from each pool advance to the knockout stage</p>
   </div>
-  <div class="team-search-box">
-    <input id="team-search" class="team-search-input" placeholder="Search player or couple..." oninput="filterTeams()"/>
-  </div>
-  <div id="team-search-result"></div>
   <div id="teams-grid"></div>
   <button class="gen-btn admin-only" onclick="generateSchedule()">Generate Schedule</button>
 </div>
@@ -103,6 +99,9 @@
 <!-- SCHEDULE PAGE -->
 <div class="pg" id="page-schedule">
   <div class="sbar" id="sbar"></div>
+  <div class="sched-search-box">
+    <input id="sched-search" class="team-search-input" placeholder="Search player or couple..." oninput="filterSchedule()" dir="auto"/>
+  </div>
   <div class="court-filter" id="court-filter"></div>
   <div id="schedule-content"></div>
 </div>

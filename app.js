@@ -56,7 +56,7 @@ function divStateToFirebase(ds) {
 
 function divStateFromFirebase(data, defCfg) {
   return {
-    groups: data.groups || [],
+    groups: data.groups && data.groups.length ? data.groups : null,
     sched:  data.sched  || [],
     ko:     koFromFirebase(data.ko),
     cfg:    data.cfg    || { ...defCfg }
@@ -79,12 +79,23 @@ async function loadInitialCloudState() {
   try {
     const [snapW, snapM] = await Promise.all([getDoc(WOMEN_REF), getDoc(MEN_REF)]);
     applyingRemoteState = true;
-    if (snapW.exists() && snapW.data().state)
-      Object.assign(S.women, divStateFromFirebase(snapW.data().state, DEF_CFG_WOMEN));
-    if (snapM.exists() && snapM.data().state)
-      Object.assign(S.men,   divStateFromFirebase(snapM.data().state, DEF_CFG_MEN));
+    if (snapW.exists() && snapW.data().state) {
+      const remote = divStateFromFirebase(snapW.data().state, DEF_CFG_WOMEN);
+      if (remote.groups) S.women.groups = remote.groups;
+      S.women.sched = remote.sched;
+      S.women.ko    = remote.ko;
+      S.women.cfg   = remote.cfg;
+    }
+    if (snapM.exists() && snapM.data().state) {
+      const remote = divStateFromFirebase(snapM.data().state, DEF_CFG_MEN);
+      if (remote.groups) S.men.groups = remote.groups;
+      S.men.sched = remote.sched;
+      S.men.ko    = remote.ko;
+      S.men.cfg   = remote.cfg;
+    }
     localStorage.setItem(STORE, JSON.stringify(S));
     applyingRemoteState = false;
+    firebaseReady = true;
     if (!snapW.exists() || !snapM.exists()) await pushStateToCloud();
   } catch (err) {
     console.error("Firebase load error:", err);
@@ -96,7 +107,11 @@ async function loadInitialCloudState() {
 onSnapshot(WOMEN_REF, snap => {
   if (!snap.exists() || !snap.data().state || applyingRemoteState) return;
   applyingRemoteState = true;
-  Object.assign(S.women, divStateFromFirebase(snap.data().state, DEF_CFG_WOMEN));
+  const remote = divStateFromFirebase(snap.data().state, DEF_CFG_WOMEN);
+  if (remote.groups) S.women.groups = remote.groups;
+  S.women.sched = remote.sched;
+  S.women.ko    = remote.ko;
+  S.women.cfg   = remote.cfg;
   localStorage.setItem(STORE, JSON.stringify(S));
   applyingRemoteState = false;
   renderAll(); setSyncStatus(true);
@@ -105,7 +120,11 @@ onSnapshot(WOMEN_REF, snap => {
 onSnapshot(MEN_REF, snap => {
   if (!snap.exists() || !snap.data().state || applyingRemoteState) return;
   applyingRemoteState = true;
-  Object.assign(S.men, divStateFromFirebase(snap.data().state, DEF_CFG_MEN));
+  const remote = divStateFromFirebase(snap.data().state, DEF_CFG_MEN);
+  if (remote.groups) S.men.groups = remote.groups;
+  S.men.sched = remote.sched;
+  S.men.ko    = remote.ko;
+  S.men.cfg   = remote.cfg;
   localStorage.setItem(STORE, JSON.stringify(S));
   applyingRemoteState = false;
   renderAll(); setSyncStatus(true);
@@ -118,16 +137,17 @@ const PW = 'volleylab';
 const DEF_CFG_WOMEN = { numCouples:10, courts:2, numGroups:2, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:0 };
 const DEF_CFG_MEN   = { numCouples:16, courts:2, numGroups:4, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:2 };
 
+// Hebrew names, English UI
 const DEFAULT_WOMEN_GROUPS = [
-  { name:'A', teams:['Daniel Geler / Dana Cohen','Aya Shmueli / Noya Shtir','Rani / Tati','Inbal / Lial','Limor / Shmrit'] },
-  { name:'B', teams:['Lori Sazwan / Noy Maimon','Dana Bobi / Noa Beidetz','Ortal / Dikla','Efrat / Yarden','Karen Armoni / Karin'] }
+  { name:'A', teams:['דניאל גלר / דנה כהן','איה שמואלי / נויה שטיר','רני / טטי','ענבל / ליאל','לימור / שמרית'] },
+  { name:'B', teams:['לורי סאזוואן / נוי מימון','דנה בובי / נועה ביידץ','אורטל / דיקלה','אפרת / ירדן','קארן ארמוני / קרין'] }
 ];
 
 const DEFAULT_MEN_GROUPS = [
-  { name:'A', teams:['Roy Ravid / Dror','Elior Cohen / Zeev Cohen','Gal Yoel Sadan / Omri Bendoli','Shahaf Moyal / Raz Goldshtein'] },
-  { name:'B', teams:["Shaham / Arik Laikin","Ra'anan Bracha / Sa'ar Danon","Alon Cohen / Roei Cohen","Or Tuvis / Avi'oz"] },
-  { name:'C', teams:['Tom Bachar / Daniel Kinan','Hillel / Uri',"El'ad / Hanan","? / Sagi Levi"] },
-  { name:'D', teams:['Matan Shapira / Eden Levi','Roei Masalton / Yarin Beit Dagan','Max David Tru / Vasily Leontiev','Dor Avital / Tomer Imber'] }
+  { name:'A', teams:['רוי רביד / דרור','אליאור כהן / זאב כהן','גל יואל סדן / עומרי בנדולי','שחף מויאל / רז גולדשטיין'] },
+  { name:'B', teams:['שהם / אריק לייקין','רענן בראשה / סער דנון','אלון כהן / רועי כהן','אור תובי / אביעז'] },
+  { name:'C', teams:['תום בכר / דניאל קינן','הלל / אורי','אלעד / חנן','? / שגיא לוי'] },
+  { name:'D', teams:['מתן שפירא / עדן לוי','רועי מסלטון / ירין בית דגן','מקס דוד טרו / ואסילי ליאונטייב','דור אביטל / תומר אימבר'] }
 ];
 
 // ============ STATE ============
@@ -136,9 +156,10 @@ let S = {
   men:   { groups: JSON.parse(JSON.stringify(DEFAULT_MEN_GROUPS)),   sched: [], ko: [], cfg: {...DEF_CFG_MEN}   }
 };
 
-let activeDiv = 'all';
-let editTarget = null;
+let activeDiv   = 'all';
+let editTarget  = null;
 let activeCourt = 'all';
+let schedFilter = '';   // team name filter on schedule page
 let admin = false;
 
 // ============ LOCAL STORAGE ============
@@ -149,11 +170,17 @@ function load() {
       const parsed = JSON.parse(d);
       if (parsed.women) {
         if (!parsed.women.cfg) parsed.women.cfg = {...DEF_CFG_WOMEN};
-        Object.assign(S.women, parsed.women);
+        if (parsed.women.groups && parsed.women.groups.length) S.women.groups = parsed.women.groups;
+        S.women.sched = parsed.women.sched || [];
+        S.women.ko    = parsed.women.ko    || [];
+        S.women.cfg   = parsed.women.cfg;
       }
       if (parsed.men) {
         if (!parsed.men.cfg) parsed.men.cfg = {...DEF_CFG_MEN};
-        Object.assign(S.men, parsed.men);
+        if (parsed.men.groups && parsed.men.groups.length) S.men.groups = parsed.men.groups;
+        S.men.sched = parsed.men.sched || [];
+        S.men.ko    = parsed.men.ko    || [];
+        S.men.cfg   = parsed.men.cfg;
       }
     }
   } catch(e) {}
@@ -186,8 +213,8 @@ function scoreError(a, b) {
   const hi = Math.max(sa, sb), lo = Math.min(sa, sb);
   if (hi < 21) return `Score must reach at least 21 · e.g. 21–${lo}`;
   if (hi === lo) return `Scores can't be equal`;
-  if (hi === 21 && hi - lo < 2) return `Need a 2-point lead · e.g. 21–${21-2}`;
-  if (hi > 21 && hi - lo !== 2) return `Above 21 both must be exactly 2 apart · e.g. ${lo+2}–${lo}`;
+  if (hi === 21 && hi - lo < 2) return `Need 2-point lead · e.g. 21–${21-2}`;
+  if (hi > 21 && hi - lo !== 2) return `Above 21: exactly 2 apart · e.g. ${lo+2}–${lo}`;
   return null;
 }
 
@@ -241,6 +268,7 @@ function refreshA() {
   const btn  = document.getElementById('abtn');
   const bar  = document.getElementById('mode-bar');
   const mtxt = document.getElementById('mode-text');
+  const settEl = document.getElementById('page-settings');
   document.body.classList.toggle('admin-mode', admin);
   if (txt)  txt.textContent  = admin ? 'Admin on' : 'Admin';
   if (btn)  btn.classList.toggle('on', admin);
@@ -248,7 +276,7 @@ function refreshA() {
   if (mtxt) mtxt.textContent = admin
     ? 'Admin mode — you can edit teams, scores and settings'
     : 'View only — tap Admin to manage the tournament';
-  if (!admin && document.getElementById('page-settings').classList.contains('on')) goPage('teams');
+  if (settEl && !admin && settEl.classList.contains('on')) goPage('teams');
 }
 
 function rerender() {
@@ -284,6 +312,9 @@ function renderAll() {
 function setDiv(d) {
   activeDiv = d;
   activeCourt = 'all';
+  schedFilter = '';
+  const inp = document.getElementById('sched-search');
+  if (inp) inp.value = '';
   renderDivFilter();
   rerender();
 }
@@ -332,51 +363,57 @@ function goPage(p) {
 }
 
 // ============ TEAMS PAGE ============
+function makeGroupCard(div, grp, gi) {
+  const badge = `<span class="ghead-div-tag">${div === 'women' ? 'W' : 'M'}</span>`;
+  const card = document.createElement('div');
+  card.className = 'group-card';
+  const teamsHTML = grp.teams.map((t, ti) => `
+    <div class="team-item" id="titem-${div}-${gi}-${ti}">
+      <span class="team-rank">${ti+1}</span>
+      <span class="team-name-display" id="tname-${div}-${gi}-${ti}">${t}</span>
+      ${admin ? `<button class="gedit-btn" onclick="openEdit('${div}',${gi},${ti})">Edit</button>
+      <button class="team-del" onclick="deleteTeam('${div}',${gi},${ti})">&#215;</button>` : ''}
+    </div>`).join('');
+  card.innerHTML = `
+    <div class="group-head">
+      <span class="gname">GROUP ${grp.name}</span>
+      ${badge}
+    </div>
+    <div class="team-list" id="tlist-${div}-${gi}">${teamsHTML}</div>
+    ${admin ? `<div class="add-team-row">
+      <input class="add-team-input" id="new-team-${div}-${gi}" placeholder="Add couple (e.g. Dana / Avi)"
+        onkeydown="if(event.key==='Enter')addTeam('${div}',${gi})"/>
+      <button class="add-team-btn" onclick="addTeam('${div}',${gi})">+ Add couple</button>
+    </div>` : ''}`;
+  return card;
+}
+
 function renderTeams(highlight) {
   const grid = document.getElementById('teams-grid');
   if (!grid) return;
   grid.innerHTML = '';
 
-  getActiveDivs().forEach(div => {
-    const DS = S[div];
-
-    if (activeDiv === 'all') {
-      const hdr = document.createElement('div');
-      hdr.className = 'div-section-header';
-      hdr.textContent = div === 'women' ? 'WOMEN' : 'MEN';
-      grid.appendChild(hdr);
-    }
-
+  if (activeDiv === 'all') {
+    // Flat grid — no section headers, W/M badge on each card
     const subGrid = document.createElement('div');
     subGrid.className = 'groups-subgrid';
-
+    ['women','men'].forEach(div => {
+      S[div].groups.forEach((grp, gi) => {
+        if (highlight && !grp.teams.some(t => t.toLowerCase().includes(highlight.toLowerCase()))) return;
+        subGrid.appendChild(makeGroupCard(div, grp, gi));
+      });
+    });
+    grid.appendChild(subGrid);
+  } else {
+    const DS = S[activeDiv];
+    const subGrid = document.createElement('div');
+    subGrid.className = 'groups-subgrid';
     DS.groups.forEach((grp, gi) => {
       if (highlight && !grp.teams.some(t => t.toLowerCase().includes(highlight.toLowerCase()))) return;
-      const card = document.createElement('div');
-      card.className = 'group-card';
-      const teamsHTML = grp.teams.map((t, ti) => `
-        <div class="team-item" id="titem-${div}-${gi}-${ti}">
-          <span class="team-rank">${ti+1}</span>
-          <span class="team-name-display" id="tname-${div}-${gi}-${ti}">${t}</span>
-          ${admin ? `<button class="gedit-btn" onclick="openEdit('${div}',${gi},${ti})">Edit</button>
-          <button class="team-del" onclick="deleteTeam('${div}',${gi},${ti})">&#215;</button>` : ''}
-        </div>`).join('');
-      card.innerHTML = `
-        <div class="group-head">
-          <span class="gname">GROUP ${grp.name}</span>
-          <span style="font-size:11px;color:#fff;opacity:.85">${grp.teams.length} teams</span>
-        </div>
-        <div class="team-list" id="tlist-${div}-${gi}">${teamsHTML}</div>
-        ${admin ? `<div class="add-team-row">
-          <input class="add-team-input" id="new-team-${div}-${gi}" placeholder="Add couple (e.g. Dana / Avi)"
-            onkeydown="if(event.key==='Enter')addTeam('${div}',${gi})"/>
-          <button class="add-team-btn" onclick="addTeam('${div}',${gi})">+ Add couple</button>
-        </div>` : ''}`;
-      subGrid.appendChild(card);
+      subGrid.appendChild(makeGroupCard(activeDiv, grp, gi));
     });
-
     grid.appendChild(subGrid);
-  });
+  }
 }
 
 function openEdit(div, gi, ti) {
@@ -425,64 +462,33 @@ function deleteTeam(div, gi, ti) {
   save(); renderTeams();
 }
 
-// ============ SEARCH ============
-function filterTeams() {
-  const inp = document.getElementById('team-search');
+// ============ SCHEDULE SEARCH ============
+function filterTeams() { filterSchedule(); }   // alias kept for window export
+
+function filterSchedule() {
+  const inp = document.getElementById('sched-search');
   const query = (inp ? inp.value : '').trim().toLowerCase();
-  const resultEl = document.getElementById('team-search-result');
 
   if (!query) {
-    if (resultEl) resultEl.style.display = 'none';
-    renderTeams();
+    schedFilter = '';
+    renderScheduleContent();
     return;
   }
 
+  // Find first matching team across active divisions
   const divs = getActiveDivs();
-  let foundDiv = null, foundTeam = null;
+  let found = null;
   outer:
   for (const div of divs) {
     for (const grp of S[div].groups) {
       for (const t of grp.teams) {
-        if (t.toLowerCase().includes(query)) { foundDiv = div; foundTeam = t; break outer; }
+        if (t.toLowerCase().includes(query)) { found = t; break outer; }
       }
     }
   }
 
-  if (!foundTeam) {
-    if (resultEl) resultEl.style.display = 'none';
-    renderTeams();
-    return;
-  }
-
-  const DS = S[foundDiv];
-  const poolGames = DS.sched.filter(g => g.a === foundTeam || g.b === foundTeam);
-  const koGames = DS.ko.flatMap((r, ri) => r.map((g, gi) => ({...g, _ri:ri, _gi:gi})))
-    .filter(g => g.a === foundTeam || g.b === foundTeam);
-  const allGames = [...poolGames, ...koGames].sort((a, b) => t2m(a.time||'00:00') - t2m(b.time||'00:00'));
-
-  const rows = allGames.map(g => {
-    const isA = g.a === foundTeam;
-    const opp = isA ? g.b : g.a;
-    const done = isValidScore(parseInt(g.sa), parseInt(g.sb));
-    const score = done ? (isA ? `${g.sa}:${g.sb}` : `${g.sb}:${g.sa}`) : '—';
-    const round = g._ri !== undefined ? getKORoundName(foundDiv, g._ri) : `Pool ${g.gn}`;
-    return `<tr><td>${g.time||'—'}</td><td>Court ${g.court||'?'}</td><td>${opp}</td><td>${score}</td><td>${round}</td></tr>`;
-  }).join('');
-
-  if (resultEl) {
-    resultEl.innerHTML = `<div class="search-result-card">
-      <div class="src-header">${foundTeam} <span class="src-div-tag">${foundDiv.toUpperCase()}</span></div>
-      ${allGames.length
-        ? `<table class="src-table">
-            <thead><tr><th>Time</th><th>Court</th><th>Opponent</th><th>Score</th><th>Round</th></tr></thead>
-            <tbody>${rows}</tbody>
-           </table>`
-        : '<div class="src-empty">No games scheduled yet — generate the schedule first</div>'}
-    </div>`;
-    resultEl.style.display = 'block';
-  }
-
-  renderTeams(query);
+  schedFilter = found || '';
+  renderScheduleContent();
 }
 
 // ============ SCHEDULE GENERATION ============
@@ -504,41 +510,41 @@ function rr(teams) {
 function generateScheduleForDiv(div) {
   const DS = S[div];
   const cfg = DS.cfg;
-  const slot = cfg.gameDur + cfg.breakDur;
+  const slotDur = cfg.gameDur + cfg.breakDur;
   const nc = cfg.courts || 2;
   const offset = cfg.courtOffset || 0;
 
-  const allGames = [];
+  // Each pool gets a fixed court: pool gi → court (gi % nc) + 1 + offset
+  // Pools cycle through courts if there are more pools than courts
+  const courtQueues = {};
   DS.groups.forEach((grp, gi) => {
+    const court = (gi % nc) + 1 + offset;
+    if (!courtQueues[court]) courtQueues[court] = [];
     rr(grp.teams).forEach(([a, b]) => {
-      allGames.push({ type:'g', div, gi, gn:grp.name, a, b, sa:'', sb:'' });
+      courtQueues[court].push({ type:'g', div, gi, gn:grp.name, a, b, sa:'', sb:'', court });
     });
   });
 
+  const courts = Object.keys(courtQueues).map(Number).sort((a,b) => a-b);
+  const maxGames = Math.max(...courts.map(c => courtQueues[c].length));
+
+  // Schedule: each slot runs one game per court in parallel
   const scheduled = [];
-  const pending = [...allGames];
-  let slotIdx = 0, safety = 0;
-  while (pending.length > 0 && safety < 300) {
-    safety++;
-    const usedTeams = new Set();
-    const remaining = [];
-    const slotGames = [];
-    for (const g of pending) {
-      if (!usedTeams.has(g.a) && !usedTeams.has(g.b) && slotGames.length < nc) {
-        g.court = slotGames.length + 1 + offset;
-        g.si = slotIdx;
-        g.time = addM(cfg.startTime, slotIdx * slot);
-        usedTeams.add(g.a); usedTeams.add(g.b);
-        slotGames.push(g); scheduled.push(g);
-      } else { remaining.push(g); }
-    }
-    if (slotGames.length === 0) slotIdx++;
-    else { pending.length = 0; pending.push(...remaining); slotIdx++; }
+  for (let si = 0; si < maxGames; si++) {
+    courts.forEach(court => {
+      if (si < courtQueues[court].length) {
+        const g = courtQueues[court][si];
+        g.si   = si;
+        g.time = addM(cfg.startTime, si * slotDur);
+        scheduled.push(g);
+      }
+    });
   }
   DS.sched = scheduled;
 
+  // ---- KO bracket ----
   const adv = cfg.advPerGroup || 0;
-  const ng = DS.groups.length;
+  const ng  = DS.groups.length;
   if (adv < 1) { DS.ko = []; return; }
 
   const koSeeds = [];
@@ -561,8 +567,8 @@ function generateScheduleForDiv(div) {
   }
   firstRound.forEach((g, gi) => {
     g.court = (gi % nc) + 1 + offset;
-    g.si = rs + Math.floor(gi / nc);
-    g.time = addM(cfg.startTime, g.si * slot);
+    g.si    = rs + Math.floor(gi / nc);
+    g.time  = addM(cfg.startTime, g.si * slotDur);
   });
   rs += Math.ceil(firstRound.length / 2);
   DS.ko.push(firstRound);
@@ -577,8 +583,8 @@ function generateScheduleForDiv(div) {
         b: `Winner of ${prevName} ${i*2+2}`,
         sa: '', sb: '', div,
         court: (i % nc) + 1 + offset,
-        si: rs + Math.floor(i / nc),
-        time: addM(cfg.startTime, (rs + Math.floor(i / nc)) * slot)
+        si:    rs + Math.floor(i / nc),
+        time:  addM(cfg.startTime, (rs + Math.floor(i / nc)) * slotDur)
       });
     }
     rs += Math.ceil(round.length / 2);
@@ -616,11 +622,42 @@ function getStandings(div, gi) {
   });
   return grp.teams.map(t => ({name:t, ...rec[t], diff:(rec[t].scored-rec[t].against)}))
     .sort((a, b) => {
-      if (b.pts !== a.pts) return b.pts - a.pts;
-      if (b.w   !== a.w)   return b.w   - a.w;
+      if (b.pts  !== a.pts)  return b.pts  - a.pts;
+      if (b.w    !== a.w)    return b.w    - a.w;
       if (b.diff !== a.diff) return b.diff - a.diff;
       return b.scored - a.scored;
     });
+}
+
+function makeStandingsCard(div, grp, gi) {
+  const DS = S[div];
+  const adv = DS.cfg.advPerGroup || 1;
+  const st  = getStandings(div, gi);
+  const played = DS.sched.filter(g => g.gi === gi && isValidScore(parseInt(g.sa), parseInt(g.sb))).length;
+  const badge  = `<span class="ghead-div-tag">${div === 'women' ? 'W' : 'M'}</span>`;
+  const card   = document.createElement('div');
+  card.className = 'scard';
+  const rows = st.map((t, i) => {
+    const isWinner = i < adv && played > 0;
+    const diff = t.diff || 0;
+    const diffStr = diff > 0 ? `+${diff}` : String(diff);
+    const diffClass = diff > 0 ? 'diff-pos' : diff < 0 ? 'diff-neg' : 'diff-zero';
+    return `<tr class="${isWinner ? 'winner' : ''}">
+      <td><span class="rnk">#${i+1}</span>${t.name}</td>
+      <td>${t.w}</td><td>${t.l}</td>
+      <td class="${diffClass}">${diff !== 0 || t.w > 0 || t.l > 0 ? diffStr : '—'}</td>
+      <td class="pts-val">${t.pts}</td>
+    </tr>`;
+  }).join('');
+  card.innerHTML = `<div class="scard-head">
+      <span class="scard-name">GROUP ${grp.name}</span>
+      ${badge}
+    </div>
+    <table class="stbl">
+      <thead><tr><th>Team</th><th>W</th><th>L</th><th>+/−</th><th>Pts</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  return card;
 }
 
 function renderStandings() {
@@ -628,54 +665,27 @@ function renderStandings() {
   if (!grid) return;
   grid.innerHTML = '';
 
-  getActiveDivs().forEach(div => {
-    const DS = S[div];
-    if (activeDiv === 'all') {
-      const hdr = document.createElement('div');
-      hdr.className = 'div-section-header';
-      hdr.textContent = div === 'women' ? 'WOMEN' : 'MEN';
-      grid.appendChild(hdr);
-    }
+  if (activeDiv === 'all') {
     const sub = document.createElement('div');
     sub.className = 'stnds-subgrid';
-
-    DS.groups.forEach((grp, gi) => {
-      const st = getStandings(div, gi);
-      const adv = DS.cfg.advPerGroup || 1;
-      const played = DS.sched.filter(g => g.gi === gi && isValidScore(parseInt(g.sa), parseInt(g.sb))).length;
-      const card = document.createElement('div');
-      card.className = 'scard';
-      const rows = st.map((t, i) => {
-        const isWinner = i < adv && played > 0;
-        const diff = t.diff || 0;
-        const diffStr = diff > 0 ? `+${diff}` : String(diff);
-        const diffClass = diff > 0 ? 'diff-pos' : diff < 0 ? 'diff-neg' : 'diff-zero';
-        return `<tr class="${isWinner ? 'winner' : ''}">
-          <td><span class="rnk">#${i+1}</span>${t.name}</td>
-          <td>${t.w}</td><td>${t.l}</td>
-          <td class="${diffClass}">${diff !== 0 || t.w > 0 || t.l > 0 ? diffStr : '—'}</td>
-          <td class="pts-val">${t.pts}</td>
-        </tr>`;
-      }).join('');
-      card.innerHTML = `<div class="scard-head">
-          <span class="scard-name">GROUP ${grp.name}</span>
-          <span style="font-size:11px;color:var(--text3)">Top ${adv} advance</span>
-        </div>
-        <table class="stbl">
-          <thead><tr><th>Team</th><th>W</th><th>L</th><th>+/−</th><th>Pts</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>`;
-      sub.appendChild(card);
+    ['women','men'].forEach(div => {
+      S[div].groups.forEach((grp, gi) => sub.appendChild(makeStandingsCard(div, grp, gi)));
     });
     grid.appendChild(sub);
-  });
+  } else {
+    const DS  = S[activeDiv];
+    const sub = document.createElement('div');
+    sub.className = 'stnds-subgrid';
+    DS.groups.forEach((grp, gi) => sub.appendChild(makeStandingsCard(activeDiv, grp, gi)));
+    grid.appendChild(sub);
+  }
 }
 
 // ============ SCORE SETTERS ============
 function setGS(div, idx, k, v) {
   if (!admin) return;
   S[div].sched[idx][k] = v;
-  const g = S[div].sched[idx];
+  const g   = S[div].sched[idx];
   const err = scoreError(g.sa, g.sb);
   const errEl = document.getElementById(`gerr-${div}-${idx}`);
   if (errEl) { errEl.textContent = err || ''; errEl.style.display = err ? 'block' : 'none'; }
@@ -691,7 +701,7 @@ function setGS(div, idx, k, v) {
 function setKS(div, ri, gi, k, v) {
   if (!admin) return;
   S[div].ko[ri][gi][k] = v;
-  const g = S[div].ko[ri][gi];
+  const g   = S[div].ko[ri][gi];
   const err = scoreError(g.sa, g.sb);
   const errEl = document.getElementById(`kerr-${div}-${ri}-${gi}`);
   if (errEl) { errEl.textContent = err || ''; errEl.style.display = err ? 'block' : 'none'; }
@@ -717,7 +727,7 @@ function renderStats() {
     totalPool += DS.sched.length;
     donePool  += DS.sched.filter(g => isValidScore(parseInt(g.sa), parseInt(g.sb))).length;
     totalKO   += DS.ko.reduce((s, r) => s + r.length, 0);
-    const src = DS.ko.length ? DS.ko[DS.ko.length-1] : null;
+    const src  = DS.ko.length ? DS.ko[DS.ko.length-1] : null;
     const last = src ? src[0] : (DS.sched.length ? DS.sched[DS.sched.length-1] : null);
     if (last && t2m(last.time||'00:00') > t2m(lastTime)) {
       lastTime = last.time; lastDur = DS.cfg.gameDur;
@@ -753,10 +763,20 @@ function renderScheduleContent() {
   if (!el) return;
   const divs = getActiveDivs();
   const hasAny = divs.some(div => S[div].sched.length > 0);
+
   if (!hasAny) {
     el.innerHTML = `<div class="empty"><h3>No schedule yet</h3><p>Go to Teams tab and click Generate Schedule</p></div>`;
     return;
   }
+
+  // If searching but no match found, show message
+  const inp = document.getElementById('sched-search');
+  const rawQuery = inp ? inp.value.trim() : '';
+  if (rawQuery && !schedFilter) {
+    el.innerHTML = `<div class="empty"><h3>No match</h3><p>No couple found for "<strong>${rawQuery}</strong>"</p></div>`;
+    return;
+  }
+
   el.innerHTML = '';
 
   divs.forEach(div => {
@@ -765,7 +785,7 @@ function renderScheduleContent() {
 
     const divSec = document.createElement('div');
 
-    if (activeDiv === 'all') {
+    if (activeDiv === 'all' && !schedFilter) {
       const dh = document.createElement('div');
       dh.className = 'div-section-header';
       dh.textContent = div === 'women' ? 'WOMEN' : 'MEN';
@@ -773,7 +793,11 @@ function renderScheduleContent() {
     }
 
     // Pool stage
-    const groupGames = DS.sched.filter(g => activeCourt === 'all' || g.court === activeCourt);
+    const groupGames = DS.sched.filter(g =>
+      (activeCourt === 'all' || g.court === activeCourt) &&
+      (!schedFilter || g.a === schedFilter || g.b === schedFilter)
+    );
+
     if (groupGames.length) {
       const sec = document.createElement('div');
       sec.innerHTML = '<div class="sec-title">Pool Stage</div>';
@@ -784,12 +808,12 @@ function renderScheduleContent() {
         const block = document.createElement('div'); block.className = 'tblock';
         block.innerHTML = `<div class="thdr"><span class="tlbl">${games[0].time}</span><div class="tline"></div></div>`;
         games.forEach(g => {
-          const idx = DS.sched.indexOf(g);
+          const idx  = DS.sched.indexOf(g);
           const done = isValidScore(parseInt(g.sa), parseInt(g.sb));
-          const pc = PILLS[(g.court-1) % 4];
-          const err = scoreError(g.sa, g.sb);
+          const pc   = PILLS[(g.court-1) % 4];
+          const err  = scoreError(g.sa, g.sb);
           const wrap = document.createElement('div');
-          const row = document.createElement('div');
+          const row  = document.createElement('div');
           row.className = 'gc' + (done ? ' done' : '');
           row.innerHTML = `
             <span class="pill ${pc}">Court ${g.court}</span>
@@ -818,7 +842,10 @@ function renderScheduleContent() {
     // KO stage
     if (DS.ko.length) {
       const koGames = DS.ko.flatMap((r, ri) => r.map((g, gi) => ({...g, ri, gi})))
-        .filter(g => activeCourt === 'all' || g.court === activeCourt);
+        .filter(g =>
+          (activeCourt === 'all' || g.court === activeCourt) &&
+          (!schedFilter || g.a === schedFilter || g.b === schedFilter)
+        );
       if (koGames.length) {
         const sec = document.createElement('div');
         sec.innerHTML = '<div class="sec-title" style="margin-top:8px">Knockout Stage</div>';
@@ -826,15 +853,15 @@ function renderScheduleContent() {
         koGames.forEach(g => { const k = `${g.ri}`; if (!byRound[k]) byRound[k] = []; byRound[k].push(g); });
         Object.keys(byRound).sort((a,b) => a-b).forEach(ri => {
           const games = byRound[ri];
-          const rn = getKORoundName(div, parseInt(ri));
+          const rn    = getKORoundName(div, parseInt(ri));
           const block = document.createElement('div'); block.className = 'tblock';
           block.innerHTML = `<div class="thdr"><span class="tlbl">${games[0].time}</span><div class="tline"></div><span class="rtag">${rn}</span></div>`;
           games.forEach(g => {
-            const pc = PILLS[(g.court-1) % 4];
+            const pc   = PILLS[(g.court-1) % 4];
             const done = isValidScore(parseInt(g.sa), parseInt(g.sb));
-            const err = scoreError(g.sa, g.sb);
+            const err  = scoreError(g.sa, g.sb);
             const wrap = document.createElement('div');
-            const row = document.createElement('div');
+            const row  = document.createElement('div');
             row.className = 'gc' + (done ? ' done' : '');
             row.innerHTML = `
               <span class="pill ${pc}">Court ${g.court}</span>
@@ -861,8 +888,13 @@ function renderScheduleContent() {
       }
     }
 
-    el.appendChild(divSec);
+    // Only append section if it has content (relevant when searching)
+    if (divSec.children.length) el.appendChild(divSec);
   });
+
+  if (!el.children.length && schedFilter) {
+    el.innerHTML = `<div class="empty"><h3>No games yet</h3><p>Generate the schedule first, then search will show results here.</p></div>`;
+  }
 }
 
 // ============ KO UPDATE ============
@@ -875,9 +907,9 @@ function getKOWinner(game) {
 
 function resolvePoolSeed(div, seed) {
   const DS = S[div];
-  const m = String(seed || '').match(/^([A-Z])(\d+)$/);
+  const m  = String(seed || '').match(/^([A-Z])(\d+)$/);
   if (!m) return { label: seed || 'TBD', known: false };
-  const gi = m[1].charCodeAt(0) - 65;
+  const gi   = m[1].charCodeAt(0) - 65;
   const rank = parseInt(m[2], 10);
   if (gi < 0 || gi >= DS.groups.length) return { label: seed, known: false };
   const grp = DS.groups[gi];
@@ -893,13 +925,13 @@ function updateKOForDiv(div) {
   const DS = S[div];
   if (!DS.ko.length) return;
   const adv = DS.cfg.advPerGroup;
-  const ng = DS.groups.length;
+  const ng  = DS.groups.length;
 
   const koSeeds = [];
   for (let rank = 1; rank <= adv; rank++)
     for (let g = 0; g < ng; g++)
       koSeeds.push(`${String.fromCharCode(65+g)}${rank}`);
-  const nKO = koSeeds.length;
+  const nKO  = koSeeds.length;
   const paired = [];
   for (let i = 0; i < Math.floor(nKO / 2); i++) paired.push([koSeeds[i], koSeeds[nKO-1-i]]);
 
@@ -930,7 +962,7 @@ function updateKO() {
   getActiveDivs().forEach(div => updateKOForDiv(div));
 }
 
-// ============ BRACKET ============
+// ============ BRACKET — no Pool column, start straight from KO ============
 const BASE = 52;
 
 function renderBracketForDiv(div, container) {
@@ -943,9 +975,9 @@ function renderBracketForDiv(div, container) {
     container.appendChild(hdr);
   }
 
-  const done = DS.sched.filter(g => isValidScore(parseInt(g.sa), parseInt(g.sb))).length;
+  const done  = DS.sched.filter(g => isValidScore(parseInt(g.sa), parseInt(g.sb))).length;
   const total = DS.sched.length;
-  const info = document.createElement('div');
+  const info  = document.createElement('div');
   info.className = 'binfo';
   info.innerHTML = !total
     ? 'Generate the schedule first to see the knockout bracket.'
@@ -955,7 +987,7 @@ function renderBracketForDiv(div, container) {
   if (!DS.ko.length) return;
 
   const adv = DS.cfg.advPerGroup || 0;
-  const ng = DS.groups.length;
+  const ng  = DS.groups.length;
   const koSeeds = [];
   for (let rank = 1; rank <= adv; rank++)
     for (let g = 0; g < ng; g++)
@@ -970,30 +1002,7 @@ function renderBracketForDiv(div, container) {
   tree.className = 'btree';
   scroll.appendChild(tree);
 
-  // Pool seedings column
-  const seedsCol = document.createElement('div');
-  seedsCol.className = 'bround';
-  seedsCol.innerHTML = '<div class="brnd-title">Pool</div>';
-  const seedMatches = document.createElement('div');
-  seedMatches.className = 'brnd-matches';
-  seedPairs.forEach((pair, pi) => {
-    const wrap = document.createElement('div');
-    wrap.className = 'bmatch-wrap';
-    if (pi > 0) wrap.style.marginTop = '10px';
-    const seedA = resolvePoolSeed(div, pair[0]);
-    const seedB = resolvePoolSeed(div, pair[1]);
-    const nameA = seedA.known ? seedA.label : pair[0];
-    const nameB = seedB.known ? seedB.label : pair[1];
-    wrap.innerHTML = `<div class="bmatch-box"><div class="bmatch bseed">
-      <div class="bteam ${seedA.known ? '' : 'tbd'}"><span class="bname">${nameA}</span>${seedA.known ? `<span class="bsc seed-tag">${pair[0]}</span>` : ''}</div>
-      <div class="bteam ${seedB.known ? '' : 'tbd'}"><span class="bname">${nameB}</span>${seedB.known ? `<span class="bsc seed-tag">${pair[1]}</span>` : ''}</div>
-    </div></div>`;
-    seedMatches.appendChild(wrap);
-  });
-  seedsCol.appendChild(seedMatches);
-  tree.appendChild(seedsCol);
-
-  // KO rounds
+  // KO rounds — start directly, no Pool seedings column
   DS.ko.forEach((round, ri) => {
     const col = document.createElement('div');
     col.className = 'bround';
@@ -1014,13 +1023,13 @@ function renderBracketForDiv(div, container) {
       let labelA, labelB, codeA = '', codeB = '', knownA = false, knownB = false;
 
       if (ri === 0) {
-        const pair = gi < seedPairs.length ? seedPairs[gi] : [g.seedA||'TBD', g.seedB||'TBD'];
+        const pair  = gi < seedPairs.length ? seedPairs[gi] : [g.seedA||'TBD', g.seedB||'TBD'];
         const seedA = resolvePoolSeed(div, pair[0]);
         const seedB = resolvePoolSeed(div, pair[1]);
         labelA = seedA.known ? seedA.label : pair[0];
         labelB = seedB.known ? seedB.label : pair[1];
-        codeA = seedA.known ? pair[0] : '';
-        codeB = seedB.known ? pair[1] : '';
+        codeA  = seedA.known ? pair[0] : '';
+        codeB  = seedB.known ? pair[1] : '';
         knownA = seedA.known; knownB = seedB.known;
       } else {
         const srcRound = getKORoundName(div, ri-1);
@@ -1092,8 +1101,7 @@ function updateTimeSetting(div, key, val) {
 }
 
 function distributeGroups(nc, ng) {
-  const base = Math.floor(nc / ng);
-  const extra = nc % ng;
+  const base = Math.floor(nc / ng), extra = nc % ng;
   const sizes = [];
   for (let i = 0; i < ng; i++) sizes.push(base + (i < extra ? 1 : 0));
   return sizes;
@@ -1101,20 +1109,20 @@ function distributeGroups(nc, ng) {
 
 function renderSettingsForDiv(div) {
   const cfg = S[div].cfg;
-  const ng = cfg.numGroups || 2;
-  const nc = cfg.numCouples || 10;
+  const ng  = cfg.numGroups  || 2;
+  const nc  = cfg.numCouples || 10;
   const sizes = distributeGroups(nc, ng);
   const totalGroupGames = sizes.reduce((s, sz) => s + (sz * (sz-1)) / 2, 0);
   const koTeams = ng * (cfg.advPerGroup || 0);
   let bracketSize = 1;
   while (bracketSize < koTeams) bracketSize *= 2;
-  const koGames = bracketSize > 1 ? bracketSize - 1 : 0;
+  const koGames    = bracketSize > 1 ? bracketSize - 1 : 0;
   const totalGames = totalGroupGames + koGames;
-  const slot = cfg.gameDur + cfg.breakDur;
-  const poolSlots = Math.ceil(totalGroupGames / (cfg.courts || 2));
-  const koSlots   = Math.ceil(koGames / (cfg.courts || 2));
-  const [sh, sm] = cfg.startTime.split(':').map(Number);
-  const endMins = sh*60 + sm + (poolSlots + koSlots) * slot;
+  const slot       = cfg.gameDur + cfg.breakDur;
+  const poolSlots  = Math.ceil(totalGroupGames / (cfg.courts || 2));
+  const koSlots    = Math.ceil(koGames / (cfg.courts || 2));
+  const [sh, sm]   = cfg.startTime.split(':').map(Number);
+  const endMins    = sh*60 + sm + (poolSlots + koSlots) * slot;
   const endH = String(Math.floor(endMins/60)%24).padStart(2,'0');
   const endM = String(endMins%60).padStart(2,'0');
   const isQF  = nc === 10 && ng === 2;
@@ -1124,7 +1132,7 @@ function renderSettingsForDiv(div) {
     <div class="sett-card" style="margin-bottom:0">
       <div class="sett-card-title">Women Format</div>
       <div class="women-mode-row">
-        <button class="wmode-btn ${isQF ? 'on' : ''}" onclick="setWomenMode('qf')">10 Couples — Quarterfinals</button>
+        <button class="wmode-btn ${isQF  ? 'on' : ''}" onclick="setWomenMode('qf')">10 Couples — Quarterfinals</button>
         <button class="wmode-btn ${isR16 ? 'on' : ''}" onclick="setWomenMode('r16')">12 Couples — Round of 16</button>
       </div>
     </div>` : '';
@@ -1147,7 +1155,7 @@ function renderSettingsForDiv(div) {
         <div class="sett-row">
           <div class="sett-label">
             <span class="sett-name">Number of groups</span>
-            <span class="sett-desc">How many pools to divide couples into.</span>
+            <span class="sett-desc">Couples are distributed evenly.</span>
           </div>
           <div class="sett-ctrl">
             <button class="num-btn" onclick="adjSetting('${div}','numGroups',-1)">−</button>
@@ -1158,7 +1166,7 @@ function renderSettingsForDiv(div) {
         <div class="sett-row">
           <div class="sett-label">
             <span class="sett-name">Teams advancing per pool</span>
-            <span class="sett-desc">How many advance to the knockout stage.</span>
+            <span class="sett-desc">How many advance to knockout.</span>
           </div>
           <div class="sett-ctrl">
             <button class="num-btn" onclick="adjSetting('${div}','advPerGroup',-1)">−</button>
@@ -1172,7 +1180,7 @@ function renderSettingsForDiv(div) {
         <div class="sett-row">
           <div class="sett-label">
             <span class="sett-name">Start time</span>
-            <span class="sett-desc">When the first game of the day begins.</span>
+            <span class="sett-desc">When the first game begins.</span>
           </div>
           <div class="sett-ctrl">
             <input type="time" class="time-inp" value="${cfg.startTime}" onchange="updateTimeSetting('${div}','startTime',this.value)" />
@@ -1181,7 +1189,7 @@ function renderSettingsForDiv(div) {
         <div class="sett-row">
           <div class="sett-label">
             <span class="sett-name">Game duration (min)</span>
-            <span class="sett-desc">Allocated time per game including transition.</span>
+            <span class="sett-desc">Allocated time per game.</span>
           </div>
           <div class="sett-ctrl">
             <button class="num-btn" onclick="adjSetting('${div}','gameDur',-5)">−</button>
@@ -1192,7 +1200,7 @@ function renderSettingsForDiv(div) {
         <div class="sett-row">
           <div class="sett-label">
             <span class="sett-name">Break between games (min)</span>
-            <span class="sett-desc">Extra buffer between games on the same court.</span>
+            <span class="sett-desc">Extra buffer between games.</span>
           </div>
           <div class="sett-ctrl">
             <button class="num-btn" onclick="adjSetting('${div}','breakDur',-5)">−</button>
@@ -1240,13 +1248,13 @@ function renderSettings() {
 function applySettings(div) {
   if (!admin) return;
   const cfg = S[div].cfg;
-  const ng = cfg.numGroups || 2;
-  const nc = cfg.numCouples || 10;
+  const ng  = cfg.numGroups  || 2;
+  const nc  = cfg.numCouples || 10;
   cfg.advPerGroup = Math.min(Math.max(cfg.advPerGroup || 1, 1), 4);
   const allTeams = S[div].groups.flatMap(g => g.teams).filter(t => t && t !== 'TBD / TBD');
   while (allTeams.length < nc) allTeams.push('TBD / TBD');
   const trimmed = allTeams.slice(0, nc);
-  const sizes = distributeGroups(nc, ng);
+  const sizes   = distributeGroups(nc, ng);
   const newGroups = [];
   let idx = 0;
   for (let g = 0; g < ng; g++) {
@@ -1284,7 +1292,8 @@ function setWomenMode(mode) {
 // ============ EXPOSE GLOBALS ============
 Object.assign(window, {
   adminClick, tryLogin, closeLogin, goPage, setDiv,
-  openEdit, closeEdit, saveEdit, addTeam, deleteTeam, filterTeams,
+  openEdit, closeEdit, saveEdit, addTeam, deleteTeam,
+  filterTeams, filterSchedule,
   generateSchedule, setGS, setKS, setCourt,
   adjSetting, updateTimeSetting, applySettings, resetAll, setWomenMode
 });

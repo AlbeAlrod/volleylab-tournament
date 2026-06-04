@@ -295,26 +295,16 @@ main{position:relative;z-index:5;max-width:980px;margin:0 auto;padding:24px 16px
 .stnds-subgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:24px;}
 #standings-grid{display:flex;flex-direction:column;gap:0;}
 
-/* ===== TEAM SEARCH ===== */
-.team-search-box{margin-bottom:16px;}
+/* ===== SEARCH (schedule page) ===== */
+.sched-search-box{margin-bottom:12px;}
 .team-search-input{width:100%;background:var(--bg2);border:1.5px solid var(--border2);border-radius:var(--r);
   color:var(--text);padding:11px 16px;font-size:14px;font-family:'Barlow',sans-serif;transition:border-color .2s;}
 .team-search-input:focus{outline:none;border-color:var(--purple2);}
 .team-search-input::placeholder{color:var(--text3);}
-#team-search-result{margin-bottom:18px;}
 
-.search-result-card{background:var(--bg2);border:1.5px solid var(--purple2);border-radius:var(--r);
-  padding:16px;box-shadow:0 4px 16px rgba(107,33,168,.1);}
-.src-header{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;color:var(--text);
-  margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-.src-div-tag{font-size:11px;font-weight:700;letter-spacing:1px;padding:3px 8px;border-radius:999px;
-  background:var(--purple);color:#fff;}
-.src-table{width:100%;border-collapse:collapse;font-size:13px;}
-.src-table th{text-align:left;padding:5px 8px;font-size:11px;color:var(--text3);text-transform:uppercase;
-  letter-spacing:.05em;border-bottom:1px solid var(--border);}
-.src-table td{padding:7px 8px;border-top:1px solid var(--border);color:var(--text);}
-.src-table tr:first-child td{border-top:none;}
-.src-empty{font-size:13px;color:var(--text3);padding:8px 0;}
+/* ===== GROUP CARD DIVISION BADGE ===== */
+.ghead-div-tag{font-size:10px;font-weight:800;letter-spacing:1.2px;padding:2px 7px;
+  border-radius:999px;background:rgba(255,255,255,.22);color:#fff;}
 
 /* ===== WOMEN MODE TOGGLE ===== */
 .women-mode-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
