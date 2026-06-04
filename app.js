@@ -138,13 +138,12 @@ onSnapshot(MEN_REF, snap => {
   S.men.sched = remote.sched;
   S.men.ko    = remote.ko;
   S.men.cfg   = remote.cfg;
-  // Normalize court offset — courts must be 1..nc, never offset beyond 4
-  if (S.men.cfg.courtOffset !== 0) {
-    const nc = Math.max(1, Math.min(S.men.cfg.courts || 2, 4));
-    S.men.cfg.courtOffset = 0;
-    S.men.sched.forEach(g => { g.court = (g.gi % nc) + 1; });
-    S.men.ko.forEach(round => round.forEach((g, gi) => { g.court = (gi % nc) + 1; }));
-  }
+  // Normalize court numbers — must be 1..nc (no offset)
+  const nc = Math.max(1, Math.min(S.men.cfg.courts || 2, 4));
+  S.men.cfg.courtOffset = 0;
+  S.men.cfg.courts = nc;
+  S.men.sched.forEach(g => { g.court = (g.gi % nc) + 1; });
+  S.men.ko.forEach(round => round.forEach((g, gi) => { g.court = (gi % nc) + 1; }));
   localStorage.setItem(STORE, JSON.stringify(S));
   applyingRemoteState = false;
   renderAll(); setSyncStatus(true);
@@ -715,7 +714,9 @@ function chainMenAfterWomen() {
 function filterTeams() { filterSchedule(); }   // alias kept for window export
 
 function teamMatchesQuery(team, query) {
-  return team.toLowerCase().replace(/\//g, ' ').split(/\s+/).filter(Boolean).some(w => w.startsWith(query));
+  const normalized = team.toLowerCase().replace(/\//g, ' ');
+  if (normalized.includes(query)) return true;
+  return normalized.split(/\s+/).filter(Boolean).some(w => w.startsWith(query));
 }
 
 function filterSchedule() {
@@ -895,7 +896,7 @@ function makeStandingsCard(div, grp, gi) {
     const diffStr = diff > 0 ? `+${diff}` : String(diff);
     const diffClass = diff > 0 ? 'diff-pos' : diff < 0 ? 'diff-neg' : 'diff-zero';
     const ti = DS.groups[gi].teams.indexOf(t.name);
-    const adminCtrls = admin
+    const adminCtrls = superAdmin
       ? `<td class="scard-admin-cell">
            <button class="gedit-btn" onclick="openEdit('${div}',${gi},${ti})">Edit</button>
            <button class="team-del" onclick="deleteTeam('${div}',${gi},${ti})">&#215;</button>
