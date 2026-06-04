@@ -183,7 +183,7 @@ let activeDiv   = 'all';
 let editTarget  = null;
 let activeCourt = 'all';
 let schedFilter = '';   // team name filter on schedule page
-let adminLevel = 0;   // 0 = viewer, 1 = מנהל (scores only), 2 = יוצר (full)
+let adminLevel = 0;   // 0 = viewer, 1 = admin (scores only), 2 = master (full access)
 let admin = false;    // adminLevel >= 1 — controls score inputs
 let superAdmin = false; // adminLevel >= 2 — controls everything else
 
@@ -329,7 +329,7 @@ function refreshA() {
   const mtxt = document.getElementById('mode-text');
   const settEl = document.getElementById('page-settings');
   const coupEl = document.getElementById('page-couples');
-  // Only level 2 (יוצר) gets the admin-mode CSS class (shows Settings/Couples tabs)
+  // Only level 2 (master) gets the admin-mode CSS class (shows Settings/Couples tabs)
   document.body.classList.toggle('admin-mode', superAdmin);
   if (txt)  txt.textContent  = adminLevel === 2 ? 'Master ✓' : adminLevel === 1 ? 'Admin ✓' : 'Admin';
   if (btn)  btn.classList.toggle('on', admin);
@@ -949,7 +949,7 @@ function renderStandings() {
 
 // ============ SCORE SETTERS ============
 function setGS(div, idx, k, v) {
-  if (!admin) return;   // level 1 (מנהל) is enough for scores
+  if (!admin) return;   // level 1 (admin) is enough for scores
   S[div].sched[idx][k] = v;
   const g   = S[div].sched[idx];
   const err = scoreError(g.sa, g.sb);
@@ -965,7 +965,7 @@ function setGS(div, idx, k, v) {
 }
 
 function setKS(div, ri, gi, k, v) {
-  if (!admin) return;   // level 1 (מנהל) is enough for scores
+  if (!admin) return;   // level 1 (admin) is enough for scores
   S[div].ko[ri][gi][k] = v;
   const g   = S[div].ko[ri][gi];
   const err = scoreError(g.sa, g.sb);
