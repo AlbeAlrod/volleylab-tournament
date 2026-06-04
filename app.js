@@ -1,5 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import {
   getFirestore,
   doc,
   getDoc,
@@ -20,7 +23,12 @@ const firebaseConfig = {
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp);
+const db   = getFirestore(firebaseApp);
+const auth = getAuth(firebaseApp);
+// Firebase Auth emails (accounts created in Firebase Console — no passwords in code)
+const EMAIL_ADMIN  = 'vl.admin@volleylab.app';
+const EMAIL_MASTER = 'vl.master@volleylab.app';
+let loginRole = 'admin'; // selected role in login modal
 const WOMEN_REF = doc(db, "tournaments", "women4");
 const MEN_REF   = doc(db, "tournaments", "men4");
 const STORE = 'vl25b_v7';
@@ -137,11 +145,6 @@ onSnapshot(MEN_REF, snap => {
 
 // ============ CONSTANTS ============
 const PILLS = ['p1','p2','p3','p4'];
-// Passwords stored as SHA-256 hashes only — plain text never appears in code
-// admin = score entry only (level 1)
-const PW_HASH_SCORE = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918';
-// master = full access (level 2)
-const PW_HASH_SUPER = 'fc613b4dfd6736a7bd268c8a0e74ed0d1c04a959f59dd74ef2874983fd443fc9';
 
 const DEF_CFG_WOMEN = { numCouples:10, courts:2, numGroups:2, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:0 };
 const DEF_CFG_MEN   = { numCouples:16, courts:2, numGroups:4, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:0 };
@@ -270,22 +273,43 @@ function getActiveDivs() {
 
 // ============ ADMIN / AUTH ============
 function adminClick() {
-  if (admin) { adminLevel = 0; admin = false; superAdmin = false; refreshA(); rerender(); return; }
+  if (admin) {
+    signOut(auth);
+    adminLevel = 0; admin = false; superAdmin = false;
+    refreshA(); rerender(); return;
+  }
+  loginRole = 'admin';
+  updateRoleButtons();
   document.getElementById('pw-modal').classList.remove('h');
   setTimeout(() => document.getElementById('pw-inp').focus(), 80);
 }
 
+function selectLoginRole(role) {
+  loginRole = role;
+  updateRoleButtons();
+  document.getElementById('pw-inp').focus();
+}
+
+function updateRoleButtons() {
+  const btnA = document.getElementById('role-btn-admin');
+  const btnM = document.getElementById('role-btn-master');
+  if (!btnA || !btnM) return;
+  const onStyle  = 'flex:1;padding:10px 6px;border-radius:var(--rs);border:2px solid var(--purple);background:var(--purple);color:#fff;font-family:\'Barlow Condensed\',sans-serif;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s';
+  const offStyle = 'flex:1;padding:10px 6px;border-radius:var(--rs);border:2px solid var(--border2);background:transparent;color:var(--purple);font-family:\'Barlow Condensed\',sans-serif;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s';
+  btnA.style.cssText = loginRole === 'admin'  ? onStyle : offStyle;
+  btnM.style.cssText = loginRole === 'master' ? onStyle : offStyle;
+}
+
 async function tryLogin() {
-  const val = document.getElementById('pw-inp').value;
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(val));
-  const hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
-  if (hex === PW_HASH_SUPER) {
-    adminLevel = 2; admin = true; superAdmin = true;
+  const val   = document.getElementById('pw-inp').value.trim();
+  const email = loginRole === 'master' ? EMAIL_MASTER : EMAIL_ADMIN;
+  try {
+    await signInWithEmailAndPassword(auth, email, val);
+    adminLevel  = loginRole === 'master' ? 2 : 1;
+    admin       = true;
+    superAdmin  = adminLevel === 2;
     closeLogin(); refreshA(); rerender();
-  } else if (hex === PW_HASH_SCORE) {
-    adminLevel = 1; admin = true; superAdmin = false;
-    closeLogin(); refreshA(); rerender();
-  } else {
+  } catch (e) {
     document.getElementById('pw-err').classList.remove('h');
     document.getElementById('pw-inp').value = '';
     document.getElementById('pw-inp').focus();
@@ -1533,7 +1557,7 @@ function setWomenMode(mode) {
 
 // ============ EXPOSE GLOBALS ============
 Object.assign(window, {
-  adminClick, tryLogin, closeLogin, goPage, setDiv,
+  adminClick, tryLogin, closeLogin, selectLoginRole, goPage, setDiv,
   openEdit, closeEdit, saveEdit, addTeam, deleteTeam,
   openEditRoster, addToRoster, deleteFromRoster, resetRoster, drawAndCreate,
   filterTeams, filterSchedule,
@@ -1544,6 +1568,17 @@ Object.assign(window, {
 // ============ BOOT ============
 window.addEventListener('load', async () => {
   load();
+  // Restore Firebase Auth session (persists across refreshes)
+  await new Promise(resolve => {
+    const unsub = onAuthStateChanged(auth, user => {
+      unsub();
+      if (user) {
+        if (user.email === EMAIL_MASTER)      { adminLevel=2; admin=true; superAdmin=true; }
+        else if (user.email === EMAIL_ADMIN)  { adminLevel=1; admin=true; superAdmin=false; }
+      }
+      resolve();
+    });
+  });
   refreshA();
   renderAll();
   await loadInitialCloudState();
