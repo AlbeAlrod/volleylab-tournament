@@ -276,18 +276,17 @@ function refreshA() {
   if (mtxt) mtxt.textContent = admin
     ? 'Admin mode — you can edit teams, scores and settings'
     : 'View only — tap Admin to manage the tournament';
-  if (settEl && !admin && settEl.classList.contains('on')) goPage('teams');
+  if (settEl && !admin && settEl.classList.contains('on')) goPage('standings');
 }
 
 function rerender() {
   renderDivFilter();
   renderStageBar();
-  const pages = ['teams','standings','schedule','bracket','settings'];
+  const pages = ['standings','schedule','bracket','settings'];
   const active = pages.find(p => {
     const el = document.getElementById('page-'+p);
     return el && el.classList.contains('on');
   });
-  if (active === 'teams')     renderTeams();
   if (active === 'standings') renderStandings();
   if (active === 'schedule')  renderSchedulePage();
   if (active === 'bracket')   { updateKO(); renderBracket(); }
@@ -299,7 +298,6 @@ function renderAll() {
   refreshA();
   renderDivFilter();
   renderStageBar();
-  renderTeams();
   renderStandings();
   renderSchedulePage();
   updateKO();
@@ -349,13 +347,15 @@ function renderStageBar() {
 
 // ============ NAV ============
 function goPage(p) {
-  if (p === 'settings' && !admin) p = 'teams';
+  if (p === 'settings' && !admin) p = 'standings';
+  if (p === 'teams') p = 'standings';
   document.querySelectorAll('.pg').forEach(e => e.classList.remove('on'));
   document.querySelectorAll('.tab').forEach(e => e.classList.remove('on'));
-  document.getElementById('page-'+p).classList.add('on');
+  const pageEl = document.getElementById('page-'+p);
+  if (!pageEl) return;
+  pageEl.classList.add('on');
   const tab = document.getElementById('tab-'+p);
   if (tab) tab.classList.add('on');
-  if (p === 'teams')     renderTeams();
   if (p === 'standings') renderStandings();
   if (p === 'schedule')  renderSchedulePage();
   if (p === 'bracket')   { updateKO(); renderBracket(); }

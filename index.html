@@ -64,8 +64,7 @@
 </header>
 
 <nav>
-  <button class="tab on" id="tab-teams"     onclick="goPage('teams')">Teams</button>
-  <button class="tab"    id="tab-standings" onclick="goPage('standings')">Standings</button>
+  <button class="tab on" id="tab-standings" onclick="goPage('standings')">Pools</button>
   <button class="tab"    id="tab-schedule"  onclick="goPage('schedule')">Schedule</button>
   <button class="tab"    id="tab-bracket"   onclick="goPage('bracket')">Knockout</button>
   <button class="tab admin-only" id="tab-settings" onclick="goPage('settings')">Settings</button>
@@ -77,21 +76,11 @@
 
 <main>
 
-<!-- TEAMS PAGE -->
-<div class="pg on" id="page-teams">
-  <div class="page-header">
-    <h2>Tournament Teams</h2>
-    <p>Pools — top teams from each pool advance to the knockout stage</p>
-  </div>
-  <div id="teams-grid"></div>
-  <button class="gen-btn admin-only" onclick="generateSchedule()">Generate Schedule</button>
-</div>
-
 <!-- STANDINGS PAGE -->
-<div class="pg" id="page-standings">
+<div class="pg on" id="page-standings">
   <div class="page-header">
-    <h2>Group Rankings</h2>
-    <p>Live ranking by wins, points and point difference — top teams advance to knockout</p>
+    <h2>Pools</h2>
+    <p>Live standings by wins, points and point difference — top teams advance to knockout</p>
   </div>
   <div id="standings-grid"></div>
 </div>
