@@ -137,8 +137,11 @@ onSnapshot(MEN_REF, snap => {
 
 // ============ CONSTANTS ============
 const PILLS = ['p1','p2','p3','p4'];
-// Password stored as SHA-256 hash only — plain text never appears in code
-const PW_HASH = 'c8a278967617ab64ed67f10626278b90efe917a3c1bfe29001b10f1806a42930';
+// Passwords stored as SHA-256 hashes only — plain text never appears in code
+// מנהל = score entry only (level 1)
+const PW_HASH_SCORE = 'dad89b6388f49be8fecb08fe28bf955928865ff621e5e4b5d728a997fd28a844';
+// יוצר = full access (level 2)
+const PW_HASH_SUPER = '825ee8be70ffb4c3867dd7cf97055e10cb7adbc50e171507cff635965ad5d5fc';
 
 const DEF_CFG_WOMEN = { numCouples:10, courts:2, numGroups:2, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:0 };
 const DEF_CFG_MEN   = { numCouples:16, courts:2, numGroups:4, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:0 };
@@ -177,7 +180,9 @@ let activeDiv   = 'all';
 let editTarget  = null;
 let activeCourt = 'all';
 let schedFilter = '';   // team name filter on schedule page
-let admin = false;
+let adminLevel = 0;   // 0 = viewer, 1 = מנהל (scores only), 2 = יוצר (full)
+let admin = false;    // adminLevel >= 1 — controls score inputs
+let superAdmin = false; // adminLevel >= 2 — controls everything else
 
 // ============ LOCAL STORAGE ============
 function load() {
@@ -265,7 +270,7 @@ function getActiveDivs() {
 
 // ============ ADMIN / AUTH ============
 function adminClick() {
-  if (admin) { admin = false; refreshA(); rerender(); return; }
+  if (admin) { adminLevel = 0; admin = false; superAdmin = false; refreshA(); rerender(); return; }
   document.getElementById('pw-modal').classList.remove('h');
   setTimeout(() => document.getElementById('pw-inp').focus(), 80);
 }
@@ -274,8 +279,12 @@ async function tryLogin() {
   const val = document.getElementById('pw-inp').value;
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(val));
   const hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
-  if (hex === PW_HASH) {
-    admin = true; closeLogin(); refreshA(); rerender();
+  if (hex === PW_HASH_SUPER) {
+    adminLevel = 2; admin = true; superAdmin = true;
+    closeLogin(); refreshA(); rerender();
+  } else if (hex === PW_HASH_SCORE) {
+    adminLevel = 1; admin = true; superAdmin = false;
+    closeLogin(); refreshA(); rerender();
   } else {
     document.getElementById('pw-err').classList.remove('h');
     document.getElementById('pw-inp').value = '';
@@ -295,16 +304,18 @@ function refreshA() {
   const bar  = document.getElementById('mode-bar');
   const mtxt = document.getElementById('mode-text');
   const settEl = document.getElementById('page-settings');
-  document.body.classList.toggle('admin-mode', admin);
-  if (txt)  txt.textContent  = admin ? 'Admin on' : 'Admin';
+  const coupEl = document.getElementById('page-couples');
+  // Only level 2 (יוצר) gets the admin-mode CSS class (shows Settings/Couples tabs)
+  document.body.classList.toggle('admin-mode', superAdmin);
+  if (txt)  txt.textContent  = adminLevel === 2 ? 'יוצר ✓' : adminLevel === 1 ? 'מנהל ✓' : 'Admin';
   if (btn)  btn.classList.toggle('on', admin);
   if (bar)  bar.className = 'mode-bar ' + (admin ? 'mode-admin' : 'mode-view');
-  if (mtxt) mtxt.textContent = admin
-    ? 'Admin mode — you can edit teams, scores and settings'
-    : 'View only — tap Admin to manage the tournament';
-  const coupEl = document.getElementById('page-couples');
-  if (settEl  && !admin && settEl.classList.contains('on'))  goPage('standings');
-  if (coupEl  && !admin && coupEl.classList.contains('on'))  goPage('standings');
+  if (mtxt) mtxt.textContent =
+    adminLevel === 2 ? 'יוצר — גישה מלאה לכל ההגדרות והתוצאות' :
+    adminLevel === 1 ? 'מנהל — הזנת תוצאות בלבד' :
+    'View only — tap Admin to manage the tournament';
+  if (settEl && !superAdmin && settEl.classList.contains('on')) goPage('standings');
+  if (coupEl && !superAdmin && coupEl.classList.contains('on')) goPage('standings');
 }
 
 function rerender() {
@@ -377,7 +388,7 @@ function renderStageBar() {
 
 // ============ NAV ============
 function goPage(p) {
-  if ((p === 'settings' || p === 'couples') && !admin) p = 'standings';
+  if ((p === 'settings' || p === 'couples') && !superAdmin) p = 'standings';
   if (p === 'teams') p = 'standings';
   document.querySelectorAll('.pg').forEach(e => e.classList.remove('on'));
   document.querySelectorAll('.tab').forEach(e => e.classList.remove('on'));
@@ -402,7 +413,7 @@ function makeGroupCard(div, grp, gi) {
     <div class="team-item" id="titem-${div}-${gi}-${ti}">
       <span class="team-rank">${ti+1}</span>
       <span class="team-name-display" id="tname-${div}-${gi}-${ti}">${t}</span>
-      ${admin ? `<button class="gedit-btn" onclick="openEdit('${div}',${gi},${ti})">Edit</button>
+      ${superAdmin ? `<button class="gedit-btn" onclick="openEdit('${div}',${gi},${ti})">Edit</button>
       <button class="team-del" onclick="deleteTeam('${div}',${gi},${ti})">&#215;</button>` : ''}
     </div>`).join('');
   card.innerHTML = `
@@ -411,7 +422,7 @@ function makeGroupCard(div, grp, gi) {
       ${badge}
     </div>
     <div class="team-list" id="tlist-${div}-${gi}">${teamsHTML}</div>
-    ${admin ? `<div class="add-team-row">
+    ${superAdmin ? `<div class="add-team-row">
       <input class="add-team-input" id="new-team-${div}-${gi}" placeholder="Add couple (e.g. Dana / Avi)"
         onkeydown="if(event.key==='Enter')addTeam('${div}',${gi})"/>
       <button class="add-team-btn" onclick="addTeam('${div}',${gi})">+ Add couple</button>
@@ -451,7 +462,7 @@ function renderTeams(highlight) {
 }
 
 function openEdit(div, gi, ti) {
-  if (!admin) return;
+  if (!superAdmin) return;
   editTarget = {div, gi, ti};
   const name = S[div].groups[gi].teams[ti];
   const parts = name.split('/').map(s => s.trim());
@@ -492,7 +503,7 @@ function saveEdit() {
 }
 
 function addTeam(div, gi) {
-  if (!admin) return;
+  if (!superAdmin) return;
   const inp = document.getElementById(`new-team-${div}-${gi}`);
   if (!inp) return;
   const name = inp.value.trim();
@@ -503,7 +514,7 @@ function addTeam(div, gi) {
 }
 
 function deleteTeam(div, gi, ti) {
-  if (!admin) return;
+  if (!superAdmin) return;
   if (S[div].groups[gi].teams.length <= 1) { alert('Each pool needs at least 1 team'); return; }
   S[div].groups[gi].teams.splice(ti, 1);
   save(); renderStandings();
@@ -544,18 +555,18 @@ function makeCouplesCard(div) {
     <div class="team-item">
       <span class="team-rank">${i+1}</span>
       <span class="team-name-display">${name}</span>
-      ${admin ? `<button class="gedit-btn" onclick="openEditRoster('${div}',${i})">Edit</button>
+      ${superAdmin ? `<button class="gedit-btn" onclick="openEditRoster('${div}',${i})">Edit</button>
       <button class="team-del" onclick="deleteFromRoster('${div}',${i})">&#215;</button>` : ''}
     </div>`).join('');
 
-  const addRow = admin ? `
+  const addRow = superAdmin ? `
     <div class="add-team-row">
       <input class="add-team-input" id="new-couple-${div}" placeholder="Add couple (e.g. Dana / Avi)"
         onkeydown="if(event.key==='Enter')addToRoster('${div}')"/>
       <button class="add-team-btn" onclick="addToRoster('${div}')">+ Add couple</button>
     </div>` : '';
 
-  const drawArea = admin ? `
+  const drawArea = superAdmin ? `
     <div class="draw-btn-wrap">
       <button class="draw-btn" onclick="drawAndCreate('${div}')">🎲 Draw &amp; Create Tournament</button>
       <button class="reset-roster-btn" onclick="resetRoster('${div}')">↺ Reset to default couples</button>
@@ -576,7 +587,7 @@ function makeCouplesCard(div) {
 }
 
 function openEditRoster(div, idx) {
-  if (!admin) return;
+  if (!superAdmin) return;
   editTarget = { div, rosterIdx: idx };
   const name  = S[div].roster[idx];
   const parts = name.split('/').map(s => s.trim());
@@ -588,7 +599,7 @@ function openEditRoster(div, idx) {
 }
 
 function addToRoster(div) {
-  if (!admin) return;
+  if (!superAdmin) return;
   const inp = document.getElementById(`new-couple-${div}`);
   if (!inp) return;
   const name = inp.value.trim();
@@ -599,13 +610,13 @@ function addToRoster(div) {
 }
 
 function deleteFromRoster(div, idx) {
-  if (!admin) return;
+  if (!superAdmin) return;
   S[div].roster.splice(idx, 1);
   save(); renderCouplesPage();
 }
 
 function resetRoster(div) {
-  if (!admin) return;
+  if (!superAdmin) return;
   if (!confirm('Reset to default couples?')) return;
   S[div].roster = div === 'women' ? [...DEFAULT_WOMEN_ROSTER] : [...DEFAULT_MEN_ROSTER];
   save(); renderCouplesPage();
@@ -621,7 +632,7 @@ function shuffle(arr) {
 }
 
 function drawAndCreate(div) {
-  if (!admin) return;
+  if (!superAdmin) return;
   if (S[div].sched.length && !confirm('This will clear the current schedule and draw new groups. Continue?')) return;
 
   const cfg = S[div].cfg;
@@ -801,7 +812,7 @@ function generateScheduleForDiv(div) {
 }
 
 function generateSchedule() {
-  if (!admin) return;
+  if (!superAdmin) return;
   getActiveDivs().forEach(div => generateScheduleForDiv(div));
   save();
   goPage('schedule');
@@ -866,14 +877,14 @@ function makeStandingsCard(div, grp, gi) {
     </tr>`;
   }).join('');
 
-  const addRow = admin ? `
+  const addRow = superAdmin ? `
     <div class="add-team-row">
       <input class="add-team-input" id="new-team-${div}-${gi}" placeholder="Add couple..."
         onkeydown="if(event.key==='Enter')addTeam('${div}',${gi})"/>
       <button class="add-team-btn" onclick="addTeam('${div}',${gi})">+ Add</button>
     </div>` : '';
 
-  const adminTh = admin ? '<th></th>' : '';
+  const adminTh = superAdmin ? '<th></th>' : '';
 
   card.innerHTML = `<div class="scard-head">
       <span class="scard-name">GROUP ${grp.name}</span>
@@ -914,7 +925,7 @@ function renderStandings() {
 
 // ============ SCORE SETTERS ============
 function setGS(div, idx, k, v) {
-  if (!admin) return;
+  if (!admin) return;   // level 1 (מנהל) is enough for scores
   S[div].sched[idx][k] = v;
   const g   = S[div].sched[idx];
   const err = scoreError(g.sa, g.sb);
@@ -930,7 +941,7 @@ function setGS(div, idx, k, v) {
 }
 
 function setKS(div, ri, gi, k, v) {
-  if (!admin) return;
+  if (!admin) return;   // level 1 (מנהל) is enough for scores
   S[div].ko[ri][gi][k] = v;
   const g   = S[div].ko[ri][gi];
   const err = scoreError(g.sa, g.sb);
@@ -1302,14 +1313,14 @@ const SETT_LIMITS = {
 };
 
 function adjSetting(div, key, delta) {
-  if (!admin) return;
+  if (!superAdmin) return;
   const [mn, mx] = SETT_LIMITS[key];
   S[div].cfg[key] = Math.min(mx, Math.max(mn, (S[div].cfg[key] || mn) + delta));
   save(); renderSettings();
 }
 
 function updateTimeSetting(div, key, val) {
-  if (!admin) return;
+  if (!superAdmin) return;
   S[div].cfg[key] = val; save(); renderSettings();
 }
 
@@ -1463,7 +1474,7 @@ function renderSettings() {
 }
 
 function applySettings(div) {
-  if (!admin) return;
+  if (!superAdmin) return;
   // Block Firebase snapshots from overwriting while we rebuild
   applyingRemoteState = true;
   try {
@@ -1498,7 +1509,7 @@ function applySettings(div) {
 }
 
 function resetAll(div) {
-  if (!admin) return;
+  if (!superAdmin) return;
   if (!confirm('Reset all scores and regenerate the full schedule?')) return;
   S[div].sched.forEach(g => { g.sa = ''; g.sb = ''; });
   S[div].ko.forEach(r => r.forEach(g => { g.sa = ''; g.sb = ''; }));
@@ -1507,7 +1518,7 @@ function resetAll(div) {
 }
 
 function setWomenMode(mode) {
-  if (!admin) return;
+  if (!superAdmin) return;
   if (mode === 'qf') {
     S.women.cfg.numCouples = 10;
     S.women.cfg.numGroups  = 2;
