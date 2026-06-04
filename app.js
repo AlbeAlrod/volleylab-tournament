@@ -21,9 +21,9 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
-const WOMEN_REF = doc(db, "tournaments", "women");
-const MEN_REF   = doc(db, "tournaments", "men");
-const STORE = 'vl25b_v2';
+const WOMEN_REF = doc(db, "tournaments", "women2");
+const MEN_REF   = doc(db, "tournaments", "men2");
+const STORE = 'vl25b_v3';
 
 let firebaseReady = false;
 let applyingRemoteState = false;
@@ -758,6 +758,52 @@ function renderCourtFilter() {
 
 function setCourt(c) { activeCourt = c; renderCourtFilter(); renderScheduleContent(); }
 
+// Build a single game row element
+function buildGameRow(div, g, idx, isKO) {
+  const done = isValidScore(parseInt(g.sa), parseInt(g.sb));
+  const pc   = PILLS[(g.court-1) % 4];
+  const err  = scoreError(g.sa, g.sb);
+  const wrap = document.createElement('div');
+  const row  = document.createElement('div');
+  row.className = 'gc' + (done ? ' done' : '');
+  if (isKO) {
+    row.innerHTML = `
+      <span class="pill ${pc}">Court ${g.court}</span>
+      <span class="gt">${g.a}</span>
+      <span class="gvs">vs</span>
+      <span class="gt r">${g.b}</span>
+      <span class="sw">
+        ${admin
+          ? `<input class="si" type="number" min="0" placeholder="—" value="${g.sa}" onchange="setKS('${div}',${g.ri},${g.gi},'sa',this.value)"/>
+             <span class="ssep">:</span>
+             <input class="si" type="number" min="0" placeholder="—" value="${g.sb}" onchange="setKS('${div}',${g.ri},${g.gi},'sb',this.value)"/>`
+          : `<span class="ssep">${done ? `${g.sa} : ${g.sb}` : '— : —'}</span>`}
+      </span>`;
+    const errD = document.createElement('div');
+    errD.id = `kerr-${div}-${g.ri}-${g.gi}`; errD.className = 'score-err';
+    errD.style.display = err ? 'block' : 'none'; errD.textContent = err || '';
+    wrap.appendChild(row); wrap.appendChild(errD);
+  } else {
+    row.innerHTML = `
+      <span class="pill ${pc}">Court ${g.court}</span>
+      <span class="gt">${g.a}<span class="gtag">${g.gn}</span></span>
+      <span class="gvs">vs</span>
+      <span class="gt r">${g.b}</span>
+      <span class="sw">
+        ${admin
+          ? `<input class="si" type="number" min="0" max="99" placeholder="—" value="${g.sa}" onchange="setGS('${div}',${idx},'sa',this.value)"/>
+             <span class="ssep">:</span>
+             <input class="si" type="number" min="0" max="99" placeholder="—" value="${g.sb}" onchange="setGS('${div}',${idx},'sb',this.value)"/>`
+          : `<span class="ssep">${done ? `${g.sa} : ${g.sb}` : '— : —'}</span>`}
+      </span>`;
+    const errD = document.createElement('div');
+    errD.id = `gerr-${div}-${idx}`; errD.className = 'score-err';
+    errD.style.display = err ? 'block' : 'none'; errD.textContent = err || '';
+    wrap.appendChild(row); wrap.appendChild(errD);
+  }
+  return wrap;
+}
+
 function renderScheduleContent() {
   const el = document.getElementById('schedule-content');
   if (!el) return;
@@ -769,7 +815,6 @@ function renderScheduleContent() {
     return;
   }
 
-  // If searching but no match found, show message
   const inp = document.getElementById('sched-search');
   const rawQuery = inp ? inp.value.trim() : '';
   if (rawQuery && !schedFilter) {
@@ -779,25 +824,80 @@ function renderScheduleContent() {
 
   el.innerHTML = '';
 
+  // ── UNIFIED view when All + no search filter ──────────────────────────
+  if (activeDiv === 'all' && !schedFilter) {
+    // Collect ALL pool games from both divisions, tagged with div
+    const allPool = [];
+    divs.forEach(div => {
+      S[div].sched
+        .filter(g => activeCourt === 'all' || g.court === activeCourt)
+        .forEach(g => allPool.push({...g, _div: div, _idx: S[div].sched.indexOf(g)}));
+    });
+
+    if (allPool.length) {
+      const sec = document.createElement('div');
+      sec.innerHTML = '<div class="sec-title">Pool Stage</div>';
+      // Group by time string (both divs share same start time & slot duration)
+      const byTime = {};
+      allPool.forEach(g => {
+        if (!byTime[g.time]) byTime[g.time] = [];
+        byTime[g.time].push(g);
+      });
+      Object.keys(byTime).sort((a,b) => t2m(a)-t2m(b)).forEach(time => {
+        const games = byTime[time];
+        const block = document.createElement('div'); block.className = 'tblock';
+        block.innerHTML = `<div class="thdr"><span class="tlbl">${time}</span><div class="tline"></div></div>`;
+        games.forEach(g => block.appendChild(buildGameRow(g._div, g, g._idx, false)));
+        sec.appendChild(block);
+      });
+      el.appendChild(sec);
+    }
+
+    // Collect ALL KO games from both divisions
+    const allKO = [];
+    divs.forEach(div => {
+      S[div].ko.flatMap((r, ri) => r.map((g, gi) => ({...g, ri, gi, _div: div})))
+        .filter(g => activeCourt === 'all' || g.court === activeCourt)
+        .forEach(g => allKO.push(g));
+    });
+
+    if (allKO.length) {
+      const sec = document.createElement('div');
+      sec.innerHTML = '<div class="sec-title" style="margin-top:8px">Knockout Stage</div>';
+      const byTime = {};
+      allKO.forEach(g => {
+        if (!byTime[g.time]) byTime[g.time] = [];
+        byTime[g.time].push(g);
+      });
+      Object.keys(byTime).sort((a,b) => t2m(a)-t2m(b)).forEach(time => {
+        const games = byTime[time];
+        // Round label: use the first game's round name
+        const rn = getKORoundName(games[0]._div, games[0].ri);
+        const block = document.createElement('div'); block.className = 'tblock';
+        block.innerHTML = `<div class="thdr"><span class="tlbl">${time}</span><div class="tline"></div><span class="rtag">${rn}</span></div>`;
+        games.forEach(g => block.appendChild(buildGameRow(g._div, g, -1, true)));
+        sec.appendChild(block);
+      });
+      el.appendChild(sec);
+    }
+
+    if (!el.children.length)
+      el.innerHTML = `<div class="empty"><h3>No schedule yet</h3><p>Go to Teams tab and click Generate Schedule</p></div>`;
+    return;
+  }
+
+  // ── Per-division view (Women / Men filter, or search active) ──────────
   divs.forEach(div => {
     const DS = S[div];
     if (!DS.sched.length && !DS.ko.length) return;
 
     const divSec = document.createElement('div');
 
-    if (activeDiv === 'all' && !schedFilter) {
-      const dh = document.createElement('div');
-      dh.className = 'div-section-header';
-      dh.textContent = div === 'women' ? 'WOMEN' : 'MEN';
-      divSec.appendChild(dh);
-    }
-
     // Pool stage
     const groupGames = DS.sched.filter(g =>
       (activeCourt === 'all' || g.court === activeCourt) &&
       (!schedFilter || g.a === schedFilter || g.b === schedFilter)
     );
-
     if (groupGames.length) {
       const sec = document.createElement('div');
       sec.innerHTML = '<div class="sec-title">Pool Stage</div>';
@@ -807,33 +907,7 @@ function renderScheduleContent() {
         const games = bySlot[si];
         const block = document.createElement('div'); block.className = 'tblock';
         block.innerHTML = `<div class="thdr"><span class="tlbl">${games[0].time}</span><div class="tline"></div></div>`;
-        games.forEach(g => {
-          const idx  = DS.sched.indexOf(g);
-          const done = isValidScore(parseInt(g.sa), parseInt(g.sb));
-          const pc   = PILLS[(g.court-1) % 4];
-          const err  = scoreError(g.sa, g.sb);
-          const wrap = document.createElement('div');
-          const row  = document.createElement('div');
-          row.className = 'gc' + (done ? ' done' : '');
-          row.innerHTML = `
-            <span class="pill ${pc}">Court ${g.court}</span>
-            <span class="gt">${g.a}<span class="gtag">${g.gn}</span></span>
-            <span class="gvs">vs</span>
-            <span class="gt r">${g.b}</span>
-            <span class="sw">
-              ${admin
-                ? `<input class="si" type="number" min="0" max="99" placeholder="—" value="${g.sa}" onchange="setGS('${div}',${idx},'sa',this.value)"/>
-                   <span class="ssep">:</span>
-                   <input class="si" type="number" min="0" max="99" placeholder="—" value="${g.sb}" onchange="setGS('${div}',${idx},'sb',this.value)"/>`
-                : `<span class="ssep">${done ? `${g.sa} : ${g.sb}` : '— : —'}</span>`}
-            </span>`;
-          wrap.appendChild(row);
-          const errD = document.createElement('div');
-          errD.id = `gerr-${div}-${idx}`; errD.className = 'score-err';
-          errD.style.display = err ? 'block' : 'none'; errD.textContent = err || '';
-          wrap.appendChild(errD);
-          block.appendChild(wrap);
-        });
+        games.forEach(g => block.appendChild(buildGameRow(div, g, DS.sched.indexOf(g), false)));
         sec.appendChild(block);
       });
       divSec.appendChild(sec);
@@ -853,42 +927,16 @@ function renderScheduleContent() {
         koGames.forEach(g => { const k = `${g.ri}`; if (!byRound[k]) byRound[k] = []; byRound[k].push(g); });
         Object.keys(byRound).sort((a,b) => a-b).forEach(ri => {
           const games = byRound[ri];
-          const rn    = getKORoundName(div, parseInt(ri));
+          const rn = getKORoundName(div, parseInt(ri));
           const block = document.createElement('div'); block.className = 'tblock';
           block.innerHTML = `<div class="thdr"><span class="tlbl">${games[0].time}</span><div class="tline"></div><span class="rtag">${rn}</span></div>`;
-          games.forEach(g => {
-            const pc   = PILLS[(g.court-1) % 4];
-            const done = isValidScore(parseInt(g.sa), parseInt(g.sb));
-            const err  = scoreError(g.sa, g.sb);
-            const wrap = document.createElement('div');
-            const row  = document.createElement('div');
-            row.className = 'gc' + (done ? ' done' : '');
-            row.innerHTML = `
-              <span class="pill ${pc}">Court ${g.court}</span>
-              <span class="gt">${g.a}</span>
-              <span class="gvs">vs</span>
-              <span class="gt r">${g.b}</span>
-              <span class="sw">
-                ${admin
-                  ? `<input class="si" type="number" min="0" placeholder="—" value="${g.sa}" onchange="setKS('${div}',${g.ri},${g.gi},'sa',this.value)"/>
-                     <span class="ssep">:</span>
-                     <input class="si" type="number" min="0" placeholder="—" value="${g.sb}" onchange="setKS('${div}',${g.ri},${g.gi},'sb',this.value)"/>`
-                  : `<span class="ssep">${done ? `${g.sa} : ${g.sb}` : '— : —'}</span>`}
-              </span>`;
-            wrap.appendChild(row);
-            const errD = document.createElement('div');
-            errD.id = `kerr-${div}-${g.ri}-${g.gi}`; errD.className = 'score-err';
-            errD.style.display = err ? 'block' : 'none'; errD.textContent = err || '';
-            wrap.appendChild(errD);
-            block.appendChild(wrap);
-          });
+          games.forEach(g => block.appendChild(buildGameRow(div, g, -1, true)));
           sec.appendChild(block);
         });
         divSec.appendChild(sec);
       }
     }
 
-    // Only append section if it has content (relevant when searching)
     if (divSec.children.length) el.appendChild(divSec);
   });
 
@@ -1002,19 +1050,29 @@ function renderBracketForDiv(div, container) {
   tree.className = 'btree';
   scroll.appendChild(tree);
 
-  // KO rounds — start directly, no Pool seedings column
+    // Bracket alignment maths:
+  // Each .bmatch-box is ~78px tall (2 × 34px bteam + 10px box-margin).
+  // Base gap between consecutive matches in round 0 = GAP px.
+  // HG = match-height + gap = one "slot" in round 0.
+  // colPadTop(ri) = (2^ri - 1) × HG / 2   → centres first match between its two feeders
+  // matchGap(ri)  = (2^ri - 1) × HG + GAP  → gap between consecutive matches in round ri
+  const HG = 90;   // bmatch height (78) + base gap (12)
+  const GAP = 12;
+
   DS.ko.forEach((round, ri) => {
     const col = document.createElement('div');
     col.className = 'bround';
     col.innerHTML = `<div class="brnd-title">${getKORoundName(div, ri)}</div>`;
     const matchesEl = document.createElement('div');
     matchesEl.className = 'brnd-matches';
-    const spacer = ri === 0 ? 10 : (Math.pow(2,ri)-1)*BASE + (Math.pow(2,ri-1)-1)*10;
+    const colPadTop = ri === 0 ? 0 : ((Math.pow(2, ri) - 1) * HG / 2);
+    const matchGap  = (Math.pow(2, ri) - 1) * HG + GAP;
+    matchesEl.style.paddingTop = colPadTop + 'px';
 
     round.forEach((g, gi) => {
       const wrap = document.createElement('div');
       wrap.className = 'bmatch-wrap';
-      if (gi > 0) wrap.style.marginTop = spacer + 'px';
+      if (gi > 0) wrap.style.marginTop = matchGap + 'px';
 
       const sa = parseInt(g.sa), sb = parseInt(g.sb);
       const hs = isValidScore(sa, sb);
