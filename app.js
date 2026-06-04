@@ -1213,16 +1213,7 @@ function renderSettingsForDiv(div) {
   const isQF  = nc === 10 && ng === 2;
   const isR16 = nc === 12 && ng === 4;
 
-  const womenModeHTML = div === 'women' ? `
-    <div class="sett-card" style="margin-bottom:0">
-      <div class="sett-card-title">Women Format</div>
-      <div class="women-mode-row">
-        <button class="wmode-btn ${isQF  ? 'on' : ''}" onclick="setWomenMode('qf')">10 Couples — Quarterfinals</button>
-        <button class="wmode-btn ${isR16 ? 'on' : ''}" onclick="setWomenMode('r16')">12 Couples — Round of 16</button>
-      </div>
-    </div>` : '';
-
-  return `${womenModeHTML}
+  return `
     <div class="sett-grid">
       <div class="sett-card">
         <div class="sett-card-title">Tournament Format</div>
