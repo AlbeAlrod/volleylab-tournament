@@ -513,7 +513,7 @@ function closeEdit() {
 }
 
 function saveEdit() {
-  if (!admin || !editTarget) return;
+  if (!superAdmin || !editTarget) return;
   const p1 = document.getElementById('edit-p1').value.trim();
   const p2 = document.getElementById('edit-p2').value.trim();
   const name = p2 ? `${p1} / ${p2}` : p1;
@@ -1019,7 +1019,7 @@ function renderStats() {
   el.innerHTML = `
     <div class="sc"><div class="sl">Pool Games</div><div class="sv">${donePool}/${totalPool}</div></div>
     <div class="sc"><div class="sl">KO Games</div><div class="sv">${totalKO}</div></div>
-    <div class="sc"><div class="sl">Courts</div><div class="sv">${divs.length === 2 ? '4' : '2'}</div></div>
+    <div class="sc"><div class="sl">Courts</div><div class="sv">${divs.reduce((s, d) => s + (S[d].cfg.courts || 2), 0)}</div></div>
     <div class="sc"><div class="sl">Est. End</div><div class="sv a">${end}</div></div>`;
 }
 
