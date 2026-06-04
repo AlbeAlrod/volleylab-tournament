@@ -51,11 +51,12 @@ function koFromFirebase(obj) {
 }
 
 function divStateToFirebase(ds) {
-  return { groups: ds.groups, sched: ds.sched, ko: koToFirebase(ds.ko), cfg: ds.cfg };
+  return { roster: ds.roster || [], groups: ds.groups, sched: ds.sched, ko: koToFirebase(ds.ko), cfg: ds.cfg };
 }
 
 function divStateFromFirebase(data, defCfg) {
   return {
+    roster: data.roster && data.roster.length ? data.roster : null,
     groups: data.groups && data.groups.length ? data.groups : null,
     sched:  data.sched  || [],
     ko:     koFromFirebase(data.ko),
@@ -81,6 +82,7 @@ async function loadInitialCloudState() {
     applyingRemoteState = true;
     if (snapW.exists() && snapW.data().state) {
       const remote = divStateFromFirebase(snapW.data().state, DEF_CFG_WOMEN);
+      if (remote.roster) S.women.roster = remote.roster;
       if (remote.groups) S.women.groups = remote.groups;
       S.women.sched = remote.sched;
       S.women.ko    = remote.ko;
@@ -88,6 +90,7 @@ async function loadInitialCloudState() {
     }
     if (snapM.exists() && snapM.data().state) {
       const remote = divStateFromFirebase(snapM.data().state, DEF_CFG_MEN);
+      if (remote.roster) S.men.roster = remote.roster;
       if (remote.groups) S.men.groups = remote.groups;
       S.men.sched = remote.sched;
       S.men.ko    = remote.ko;
@@ -108,6 +111,7 @@ onSnapshot(WOMEN_REF, snap => {
   if (!snap.exists() || !snap.data().state || applyingRemoteState) return;
   applyingRemoteState = true;
   const remote = divStateFromFirebase(snap.data().state, DEF_CFG_WOMEN);
+  if (remote.roster) S.women.roster = remote.roster;
   if (remote.groups) S.women.groups = remote.groups;
   S.women.sched = remote.sched;
   S.women.ko    = remote.ko;
@@ -121,6 +125,7 @@ onSnapshot(MEN_REF, snap => {
   if (!snap.exists() || !snap.data().state || applyingRemoteState) return;
   applyingRemoteState = true;
   const remote = divStateFromFirebase(snap.data().state, DEF_CFG_MEN);
+  if (remote.roster) S.men.roster = remote.roster;
   if (remote.groups) S.men.groups = remote.groups;
   S.men.sched = remote.sched;
   S.men.ko    = remote.ko;
@@ -137,23 +142,34 @@ const PW = 'volleylab';
 const DEF_CFG_WOMEN = { numCouples:10, courts:2, numGroups:2, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:0 };
 const DEF_CFG_MEN   = { numCouples:16, courts:2, numGroups:4, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:2 };
 
-// Hebrew names, English UI
-const DEFAULT_WOMEN_GROUPS = [
-  { name:'A', teams:['דניאל גלר / דנה כהן','איה שמואלי / נויה שטיר','רני / טטי','ענבל / ליאל','לימור / שמרית'] },
-  { name:'B', teams:['לורי סאזוואן / נוי מימון','דנה בובי / נועה ביידץ','אורטל / דיקלה','אפרת / ירדן','קארן ארמוני / קרין'] }
+// Hebrew names, English UI — flat rosters (used for draw)
+const DEFAULT_WOMEN_ROSTER = [
+  'דניאל גלר / דנה כהן','איה שמואלי / נויה שטיר','רני / טטי','ענבל / ליאל','לימור / שמרית',
+  'לורי סאזוואן / נוי מימון','דנה בובי / נועה ביידץ','אורטל / דיקלה','אפרת / ירדן','קארן ארמוני / קרין'
+];
+const DEFAULT_MEN_ROSTER = [
+  'רוי רביד / דרור','אליאור כהן / זאב כהן','גל יואל סדן / עומרי בנדולי','שחף מויאל / רז גולדשטיין',
+  'שהם / אריק לייקין','רענן בראשה / סער דנון','אלון כהן / רועי כהן','אור תובי / אביעז',
+  'תום בכר / דניאל קינן','הלל / אורי','אלעד / חנן','? / שגיא לוי',
+  'מתן שפירא / עדן לוי','רועי מסלטון / ירין בית דגן','מקס דוד טרו / ואסילי ליאונטייב','דור אביטל / תומר אימבר'
 ];
 
+// Legacy group defaults kept for backward-compat migration
+const DEFAULT_WOMEN_GROUPS = [
+  { name:'A', teams:DEFAULT_WOMEN_ROSTER.slice(0,5) },
+  { name:'B', teams:DEFAULT_WOMEN_ROSTER.slice(5,10) }
+];
 const DEFAULT_MEN_GROUPS = [
-  { name:'A', teams:['רוי רביד / דרור','אליאור כהן / זאב כהן','גל יואל סדן / עומרי בנדולי','שחף מויאל / רז גולדשטיין'] },
-  { name:'B', teams:['שהם / אריק לייקין','רענן בראשה / סער דנון','אלון כהן / רועי כהן','אור תובי / אביעז'] },
-  { name:'C', teams:['תום בכר / דניאל קינן','הלל / אורי','אלעד / חנן','? / שגיא לוי'] },
-  { name:'D', teams:['מתן שפירא / עדן לוי','רועי מסלטון / ירין בית דגן','מקס דוד טרו / ואסילי ליאונטייב','דור אביטל / תומר אימבר'] }
+  { name:'A', teams:DEFAULT_MEN_ROSTER.slice(0,4) },
+  { name:'B', teams:DEFAULT_MEN_ROSTER.slice(4,8) },
+  { name:'C', teams:DEFAULT_MEN_ROSTER.slice(8,12) },
+  { name:'D', teams:DEFAULT_MEN_ROSTER.slice(12,16) }
 ];
 
 // ============ STATE ============
 let S = {
-  women: { groups: JSON.parse(JSON.stringify(DEFAULT_WOMEN_GROUPS)), sched: [], ko: [], cfg: {...DEF_CFG_WOMEN} },
-  men:   { groups: JSON.parse(JSON.stringify(DEFAULT_MEN_GROUPS)),   sched: [], ko: [], cfg: {...DEF_CFG_MEN}   }
+  women: { roster: [...DEFAULT_WOMEN_ROSTER], groups: JSON.parse(JSON.stringify(DEFAULT_WOMEN_GROUPS)), sched: [], ko: [], cfg: {...DEF_CFG_WOMEN} },
+  men:   { roster: [...DEFAULT_MEN_ROSTER],   groups: JSON.parse(JSON.stringify(DEFAULT_MEN_GROUPS)),   sched: [], ko: [], cfg: {...DEF_CFG_MEN}   }
 };
 
 let activeDiv   = 'all';
@@ -171,16 +187,23 @@ function load() {
       if (parsed.women) {
         if (!parsed.women.cfg) parsed.women.cfg = {...DEF_CFG_WOMEN};
         if (parsed.women.groups && parsed.women.groups.length) S.women.groups = parsed.women.groups;
-        S.women.sched = parsed.women.sched || [];
-        S.women.ko    = parsed.women.ko    || [];
-        S.women.cfg   = parsed.women.cfg;
+        S.women.sched  = parsed.women.sched  || [];
+        S.women.ko     = parsed.women.ko     || [];
+        S.women.cfg    = parsed.women.cfg;
+        // Migrate: if no roster saved, derive from groups
+        S.women.roster = parsed.women.roster && parsed.women.roster.length
+          ? parsed.women.roster
+          : S.women.groups.flatMap(g => g.teams);
       }
       if (parsed.men) {
         if (!parsed.men.cfg) parsed.men.cfg = {...DEF_CFG_MEN};
         if (parsed.men.groups && parsed.men.groups.length) S.men.groups = parsed.men.groups;
-        S.men.sched = parsed.men.sched || [];
-        S.men.ko    = parsed.men.ko    || [];
-        S.men.cfg   = parsed.men.cfg;
+        S.men.sched  = parsed.men.sched  || [];
+        S.men.ko     = parsed.men.ko     || [];
+        S.men.cfg    = parsed.men.cfg;
+        S.men.roster = parsed.men.roster && parsed.men.roster.length
+          ? parsed.men.roster
+          : S.men.groups.flatMap(g => g.teams);
       }
     }
   } catch(e) {}
@@ -276,7 +299,9 @@ function refreshA() {
   if (mtxt) mtxt.textContent = admin
     ? 'Admin mode — you can edit teams, scores and settings'
     : 'View only — tap Admin to manage the tournament';
-  if (settEl && !admin && settEl.classList.contains('on')) goPage('standings');
+  const coupEl = document.getElementById('page-couples');
+  if (settEl  && !admin && settEl.classList.contains('on'))  goPage('standings');
+  if (coupEl  && !admin && coupEl.classList.contains('on'))  goPage('standings');
 }
 
 function rerender() {
@@ -291,6 +316,7 @@ function rerender() {
   if (active === 'schedule')  renderSchedulePage();
   if (active === 'bracket')   { updateKO(); renderBracket(); }
   if (active === 'settings')  renderSettings();
+  if (active === 'couples')   renderCouplesPage();
   renderStats();
 }
 
@@ -303,6 +329,7 @@ function renderAll() {
   updateKO();
   renderBracket();
   renderSettings();
+  renderCouplesPage();
   renderStats();
 }
 
@@ -347,7 +374,7 @@ function renderStageBar() {
 
 // ============ NAV ============
 function goPage(p) {
-  if (p === 'settings' && !admin) p = 'standings';
+  if ((p === 'settings' || p === 'couples') && !admin) p = 'standings';
   if (p === 'teams') p = 'standings';
   document.querySelectorAll('.pg').forEach(e => e.classList.remove('on'));
   document.querySelectorAll('.tab').forEach(e => e.classList.remove('on'));
@@ -360,6 +387,7 @@ function goPage(p) {
   if (p === 'schedule')  renderSchedulePage();
   if (p === 'bracket')   { updateKO(); renderBracket(); }
   if (p === 'settings')  renderSettings();
+  if (p === 'couples')   renderCouplesPage();
 }
 
 // ============ TEAMS PAGE ============
@@ -431,15 +459,28 @@ function openEdit(div, gi, ti) {
   document.getElementById('edit-p1').focus();
 }
 
-function closeEdit() { document.getElementById('edit-modal').classList.add('h'); editTarget = null; }
+function closeEdit() {
+  document.getElementById('edit-modal').classList.add('h');
+  editTarget = null;
+}
 
 function saveEdit() {
   if (!admin || !editTarget) return;
-  const {div, gi, ti} = editTarget;
   const p1 = document.getElementById('edit-p1').value.trim();
   const p2 = document.getElementById('edit-p2').value.trim();
   const name = p2 ? `${p1} / ${p2}` : p1;
   if (!name) return;
+
+  // Roster edit (from Couples page)
+  if (editTarget.rosterIdx !== undefined) {
+    const {div, rosterIdx} = editTarget;
+    S[div].roster[rosterIdx] = name;
+    closeEdit(); save(); renderCouplesPage();
+    return;
+  }
+
+  // Group team edit (from Pools page)
+  const {div, gi, ti} = editTarget;
   const old = S[div].groups[gi].teams[ti];
   S[div].groups[gi].teams[ti] = name;
   S[div].sched.forEach(g => { if (g.a === old) g.a = name; if (g.b === old) g.b = name; });
@@ -463,6 +504,147 @@ function deleteTeam(div, gi, ti) {
   if (S[div].groups[gi].teams.length <= 1) { alert('Each pool needs at least 1 team'); return; }
   S[div].groups[gi].teams.splice(ti, 1);
   save(); renderStandings();
+}
+
+// ============ COUPLES PAGE ============
+function renderCouplesPage() {
+  const container = document.getElementById('couples-container');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (activeDiv === 'all') {
+    ['women','men'].forEach(div => {
+      const hdr = document.createElement('div');
+      hdr.className = 'div-section-header';
+      hdr.textContent = div === 'women' ? 'WOMEN' : 'MEN';
+      container.appendChild(hdr);
+      const sub = document.createElement('div');
+      sub.className = 'couples-subgrid';
+      sub.appendChild(makeCouplesCard(div));
+      container.appendChild(sub);
+    });
+  } else {
+    const sub = document.createElement('div');
+    sub.className = 'couples-subgrid';
+    sub.appendChild(makeCouplesCard(activeDiv));
+    container.appendChild(sub);
+  }
+}
+
+function makeCouplesCard(div) {
+  const roster = S[div].roster;
+  const nc = S[div].cfg.numCouples;
+  const countClass = roster.length === nc ? 'count-ok' : roster.length > nc ? 'count-over' : '';
+  const badge = `<span class="ghead-div-tag">${div === 'women' ? 'W' : 'M'}</span>`;
+
+  const itemsHTML = roster.map((name, i) => `
+    <div class="team-item">
+      <span class="team-rank">${i+1}</span>
+      <span class="team-name-display">${name}</span>
+      ${admin ? `<button class="gedit-btn" onclick="openEditRoster('${div}',${i})">Edit</button>
+      <button class="team-del" onclick="deleteFromRoster('${div}',${i})">&#215;</button>` : ''}
+    </div>`).join('');
+
+  const addRow = admin ? `
+    <div class="add-team-row">
+      <input class="add-team-input" id="new-couple-${div}" placeholder="Add couple (e.g. Dana / Avi)"
+        onkeydown="if(event.key==='Enter')addToRoster('${div}')"/>
+      <button class="add-team-btn" onclick="addToRoster('${div}')">+ Add couple</button>
+    </div>` : '';
+
+  const drawArea = admin ? `
+    <div class="draw-btn-wrap">
+      <button class="draw-btn" onclick="drawAndCreate('${div}')">🎲 Draw &amp; Create Tournament</button>
+      <button class="reset-roster-btn" onclick="resetRoster('${div}')">↺ Reset to default couples</button>
+    </div>` : '';
+
+  const card = document.createElement('div');
+  card.className = 'scard';
+  card.innerHTML = `
+    <div class="scard-head">
+      <span class="scard-name">${div === 'women' ? 'WOMEN' : 'MEN'}</span>
+      ${badge}
+      <span class="couple-count ${countClass}" style="margin-left:auto">${roster.length} / ${nc}</span>
+    </div>
+    <div class="team-list">${itemsHTML}</div>
+    ${addRow}
+    ${drawArea}`;
+  return card;
+}
+
+function openEditRoster(div, idx) {
+  if (!admin) return;
+  editTarget = { div, rosterIdx: idx };
+  const name  = S[div].roster[idx];
+  const parts = name.split('/').map(s => s.trim());
+  document.getElementById('edit-p1').value = parts[0] || '';
+  document.getElementById('edit-p2').value = parts[1] || '';
+  document.getElementById('edit-modal-title').textContent = 'Edit Couple';
+  document.getElementById('edit-modal').classList.remove('h');
+  document.getElementById('edit-p1').focus();
+}
+
+function addToRoster(div) {
+  if (!admin) return;
+  const inp = document.getElementById(`new-couple-${div}`);
+  if (!inp) return;
+  const name = inp.value.trim();
+  if (!name) return;
+  S[div].roster.push(name);
+  inp.value = '';
+  save(); renderCouplesPage();
+}
+
+function deleteFromRoster(div, idx) {
+  if (!admin) return;
+  S[div].roster.splice(idx, 1);
+  save(); renderCouplesPage();
+}
+
+function resetRoster(div) {
+  if (!admin) return;
+  if (!confirm('Reset to default couples?')) return;
+  S[div].roster = div === 'women' ? [...DEFAULT_WOMEN_ROSTER] : [...DEFAULT_MEN_ROSTER];
+  save(); renderCouplesPage();
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function drawAndCreate(div) {
+  if (!admin) return;
+  if (S[div].sched.length && !confirm('This will clear the current schedule and draw new groups. Continue?')) return;
+
+  const cfg = S[div].cfg;
+  const ng  = cfg.numGroups  || 2;
+  const nc  = cfg.numCouples || S[div].roster.length;
+
+  // Shuffle roster, pad/trim to nc
+  let pool = shuffle(S[div].roster);
+  while (pool.length < nc) pool.push('TBD / TBD');
+  pool = pool.slice(0, nc);
+
+  // Distribute evenly across groups
+  const sizes = distributeGroups(nc, ng);
+  S[div].groups = [];
+  let idx = 0;
+  for (let g = 0; g < ng; g++) {
+    S[div].groups.push({ name: String.fromCharCode(65+g), teams: pool.slice(idx, idx + sizes[g]) });
+    idx += sizes[g];
+  }
+
+  S[div].sched = [];
+  S[div].ko    = [];
+  generateScheduleForDiv(div);
+  save();
+  renderAll();
+  goPage('standings');
 }
 
 // ============ SCHEDULE SEARCH ============
@@ -1323,23 +1505,35 @@ function renderSettings() {
 
 function applySettings(div) {
   if (!admin) return;
-  const cfg = S[div].cfg;
-  const ng  = cfg.numGroups  || 2;
-  const nc  = cfg.numCouples || 10;
-  cfg.advPerGroup = Math.min(Math.max(cfg.advPerGroup || 1, 1), 4);
-  const allTeams = S[div].groups.flatMap(g => g.teams).filter(t => t && t !== 'TBD / TBD');
-  while (allTeams.length < nc) allTeams.push('TBD / TBD');
-  const trimmed = allTeams.slice(0, nc);
-  const sizes   = distributeGroups(nc, ng);
-  const newGroups = [];
-  let idx = 0;
-  for (let g = 0; g < ng; g++) {
-    newGroups.push({ name: String.fromCharCode(65+g), teams: trimmed.slice(idx, idx + sizes[g]) });
-    idx += sizes[g];
+  // Block Firebase snapshots from overwriting while we rebuild
+  applyingRemoteState = true;
+  try {
+    const cfg = S[div].cfg;
+    const ng  = cfg.numGroups  || 2;
+    const nc  = cfg.numCouples || 10;
+    cfg.advPerGroup = Math.min(Math.max(cfg.advPerGroup || 1, 1), 8);
+    const allTeams = S[div].groups.flatMap(g => g.teams)
+      .filter(t => t && t !== 'TBD / TBD' && t.trim() !== '/');
+    while (allTeams.length < nc) allTeams.push('TBD / TBD');
+    const trimmed = allTeams.slice(0, nc);
+    const sizes   = distributeGroups(nc, ng);
+    const newGroups = [];
+    let idx = 0;
+    for (let g = 0; g < ng; g++) {
+      newGroups.push({ name: String.fromCharCode(65+g), teams: trimmed.slice(idx, idx + sizes[g]) });
+      idx += sizes[g];
+    }
+    S[div].groups = newGroups;
+    S[div].sched  = [];
+    S[div].ko     = [];
+    generateScheduleForDiv(div);
+  } finally {
+    applyingRemoteState = false;
   }
-  S[div].groups = newGroups; S[div].sched = []; S[div].ko = [];
-  generateScheduleForDiv(div);
-  save(); goPage('schedule');
+  try { localStorage.setItem(STORE, JSON.stringify(S)); } catch(e) {}
+  renderAll();
+  pushStateToCloud();
+  goPage('standings');
 }
 
 function resetAll(div) {
@@ -1369,6 +1563,7 @@ function setWomenMode(mode) {
 Object.assign(window, {
   adminClick, tryLogin, closeLogin, goPage, setDiv,
   openEdit, closeEdit, saveEdit, addTeam, deleteTeam,
+  openEditRoster, addToRoster, deleteFromRoster, resetRoster, drawAndCreate,
   filterTeams, filterSchedule,
   generateSchedule, setGS, setKS, setCourt,
   adjSetting, updateTimeSetting, applySettings, resetAll, setWomenMode

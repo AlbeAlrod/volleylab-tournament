@@ -62,6 +62,7 @@
   <button class="tab on" id="tab-standings" onclick="goPage('standings')">Pools</button>
   <button class="tab"    id="tab-schedule"  onclick="goPage('schedule')">Schedule</button>
   <button class="tab"    id="tab-bracket"   onclick="goPage('bracket')">Knockout</button>
+  <button class="tab admin-only" id="tab-couples"  onclick="goPage('couples')">Couples</button>
   <button class="tab admin-only" id="tab-settings" onclick="goPage('settings')">Settings</button>
 </nav>
 <div id="mode-bar" class="mode-bar mode-view">
@@ -95,6 +96,15 @@
   <div id="bracket-container"></div>
 </div>
 
+<!-- COUPLES PAGE (admin only) -->
+<div class="pg" id="page-couples">
+  <div class="page-header">
+    <h2>Couples</h2>
+    <p>Register all couples, then draw to randomly create groups</p>
+  </div>
+  <div id="couples-container"></div>
+</div>
+
 <!-- SETTINGS PAGE -->
 <div class="pg" id="page-settings">
   <div class="page-header">
@@ -106,6 +116,6 @@
 
 </main>
 
-<script type="module" src="./app.js?v=2"></script>
+<script type="module" src="./app.js?v=3"></script>
 </body>
 </html>
