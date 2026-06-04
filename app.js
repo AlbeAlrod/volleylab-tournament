@@ -84,6 +84,14 @@ async function pushStateToCloud() {
   }
 }
 
+function normalizeMenCourts() {
+  const nc = Math.max(1, Math.min(S.men.cfg.courts || 2, 4));
+  S.men.cfg.courtOffset = 0;
+  S.men.cfg.courts = nc;
+  S.men.sched.forEach(g => { g.court = (g.gi % nc) + 1; });
+  S.men.ko.forEach(round => round.forEach((g, gi) => { g.court = (gi % nc) + 1; }));
+}
+
 async function loadInitialCloudState() {
   try {
     const [snapW, snapM] = await Promise.all([getDoc(WOMEN_REF), getDoc(MEN_REF)]);
@@ -103,6 +111,7 @@ async function loadInitialCloudState() {
       S.men.sched = remote.sched;
       S.men.ko    = remote.ko;
       S.men.cfg   = remote.cfg;
+      normalizeMenCourts();
     }
     localStorage.setItem(STORE, JSON.stringify(S));
     applyingRemoteState = false;
@@ -138,12 +147,7 @@ onSnapshot(MEN_REF, snap => {
   S.men.sched = remote.sched;
   S.men.ko    = remote.ko;
   S.men.cfg   = remote.cfg;
-  // Normalize court numbers — must be 1..nc (no offset)
-  const nc = Math.max(1, Math.min(S.men.cfg.courts || 2, 4));
-  S.men.cfg.courtOffset = 0;
-  S.men.cfg.courts = nc;
-  S.men.sched.forEach(g => { g.court = (g.gi % nc) + 1; });
-  S.men.ko.forEach(round => round.forEach((g, gi) => { g.court = (gi % nc) + 1; }));
+  normalizeMenCourts();
   localStorage.setItem(STORE, JSON.stringify(S));
   applyingRemoteState = false;
   renderAll(); setSyncStatus(true);
