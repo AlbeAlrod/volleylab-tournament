@@ -223,6 +223,7 @@ function load() {
         S.men.roster = parsed.men.roster && parsed.men.roster.length
           ? parsed.men.roster
           : S.men.groups.flatMap(g => g.teams);
+        normalizeMenCourts();
       }
     }
   } catch(e) {}
@@ -889,13 +890,15 @@ function makeStandingsCard(div, grp, gi) {
   const DS = S[div];
   const adv = DS.cfg.advPerGroup || 1;
   const st  = getStandings(div, gi);
+  const totalInPool = (grp.teams.length * (grp.teams.length - 1)) / 2;
   const played = DS.sched.filter(g => g.gi === gi && isValidScore(parseInt(g.sa), parseInt(g.sb))).length;
+  const poolDone = played === totalInPool && totalInPool > 0;
   const badge  = `<span class="ghead-div-tag">${div === 'women' ? 'W' : 'M'}</span>`;
   const card   = document.createElement('div');
   card.className = 'scard';
   // Build rows — with edit/delete buttons in admin mode
   const rows = st.map((t, i) => {
-    const isWinner = i < adv && played > 0;
+    const isWinner = i < adv && poolDone;
     const diff = t.diff || 0;
     const diffStr = diff > 0 ? `+${diff}` : String(diff);
     const diffClass = diff > 0 ? 'diff-pos' : diff < 0 ? 'diff-neg' : 'diff-zero';
