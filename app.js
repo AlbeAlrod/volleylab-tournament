@@ -21,9 +21,9 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
-const WOMEN_REF = doc(db, "tournaments", "women2");
-const MEN_REF   = doc(db, "tournaments", "men2");
-const STORE = 'vl25b_v3';
+const WOMEN_REF = doc(db, "tournaments", "women3");
+const MEN_REF   = doc(db, "tournaments", "men3");
+const STORE = 'vl25b_v4';
 
 let firebaseReady = false;
 let applyingRemoteState = false;
@@ -444,7 +444,7 @@ function saveEdit() {
   S[div].groups[gi].teams[ti] = name;
   S[div].sched.forEach(g => { if (g.a === old) g.a = name; if (g.b === old) g.b = name; });
   S[div].ko.forEach(r => r.forEach(g => { if (g.a === old) g.a = name; if (g.b === old) g.b = name; }));
-  closeEdit(); save(); renderTeams();
+  closeEdit(); save(); renderStandings();
 }
 
 function addTeam(div, gi) {
@@ -455,14 +455,14 @@ function addTeam(div, gi) {
   if (!name) return;
   S[div].groups[gi].teams.push(name);
   inp.value = '';
-  save(); renderTeams();
+  save(); renderStandings();
 }
 
 function deleteTeam(div, gi, ti) {
   if (!admin) return;
   if (S[div].groups[gi].teams.length <= 1) { alert('Each pool needs at least 1 team'); return; }
   S[div].groups[gi].teams.splice(ti, 1);
-  save(); renderTeams();
+  save(); renderStandings();
 }
 
 // ============ SCHEDULE SEARCH ============
@@ -640,26 +640,46 @@ function makeStandingsCard(div, grp, gi) {
   const badge  = `<span class="ghead-div-tag">${div === 'women' ? 'W' : 'M'}</span>`;
   const card   = document.createElement('div');
   card.className = 'scard';
+  // Build rows — with edit/delete buttons in admin mode
   const rows = st.map((t, i) => {
     const isWinner = i < adv && played > 0;
     const diff = t.diff || 0;
     const diffStr = diff > 0 ? `+${diff}` : String(diff);
     const diffClass = diff > 0 ? 'diff-pos' : diff < 0 ? 'diff-neg' : 'diff-zero';
+    const ti = DS.groups[gi].teams.indexOf(t.name);
+    const adminCtrls = admin
+      ? `<td class="scard-admin-cell">
+           <button class="gedit-btn" onclick="openEdit('${div}',${gi},${ti})">Edit</button>
+           <button class="team-del" onclick="deleteTeam('${div}',${gi},${ti})">&#215;</button>
+         </td>`
+      : '';
     return `<tr class="${isWinner ? 'winner' : ''}">
       <td><span class="rnk">#${i+1}</span>${t.name}</td>
       <td>${t.w}</td><td>${t.l}</td>
       <td class="${diffClass}">${diff !== 0 || t.w > 0 || t.l > 0 ? diffStr : '—'}</td>
       <td class="pts-val">${t.pts}</td>
+      ${adminCtrls}
     </tr>`;
   }).join('');
+
+  const addRow = admin ? `
+    <div class="add-team-row">
+      <input class="add-team-input" id="new-team-${div}-${gi}" placeholder="Add couple..."
+        onkeydown="if(event.key==='Enter')addTeam('${div}',${gi})"/>
+      <button class="add-team-btn" onclick="addTeam('${div}',${gi})">+ Add</button>
+    </div>` : '';
+
+  const adminTh = admin ? '<th></th>' : '';
+
   card.innerHTML = `<div class="scard-head">
       <span class="scard-name">GROUP ${grp.name}</span>
       ${badge}
     </div>
     <table class="stbl">
-      <thead><tr><th>Team</th><th>W</th><th>L</th><th>+/−</th><th>Pts</th></tr></thead>
+      <thead><tr><th>Team</th><th>W</th><th>L</th><th>+/−</th><th>Pts</th>${adminTh}</tr></thead>
       <tbody>${rows}</tbody>
-    </table>`;
+    </table>
+    ${addRow}`;
   return card;
 }
 

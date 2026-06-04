@@ -151,6 +151,8 @@ main{position:relative;z-index:5;max-width:980px;margin:0 auto;padding:24px 16px
 .diff-neg{color:var(--red);}
 .diff-zero{color:var(--text3);}
 .pts-val{color:var(--purple);font-weight:600;}
+.scard-admin-cell{white-space:nowrap;padding:4px 6px!important;}
+.scard-admin-cell .gedit-btn,.scard-admin-cell .team-del{display:inline-flex;}
 .crown{margin-right:4px;}
 
 /* ===== SCHEDULE PAGES ===== */
