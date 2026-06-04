@@ -642,9 +642,26 @@ function drawAndCreate(div) {
   S[div].sched = [];
   S[div].ko    = [];
   generateScheduleForDiv(div);
+  // If women drawn: update men's start time to run after women finish
+  if (div === 'women') chainMenAfterWomen();
   save();
   renderAll();
   goPage('standings');
+}
+
+// ============ SEQUENTIAL SCHEDULING HELPER ============
+// Returns estimated end time of a division's full schedule (pool + KO)
+function estimateEnd(div) {
+  const DS = S[div];
+  let lastTime = DS.cfg.startTime;
+  DS.sched.forEach(g => { if (g.time && t2m(g.time) > t2m(lastTime)) lastTime = g.time; });
+  DS.ko.forEach(r => r.forEach(g => { if (g.time && t2m(g.time) > t2m(lastTime)) lastTime = g.time; }));
+  return addM(lastTime, DS.cfg.gameDur);
+}
+
+// After women's schedule is built, chain men's start time to women's end
+function chainMenAfterWomen() {
+  S.men.cfg.startTime = estimateEnd('women');
 }
 
 // ============ SCHEDULE SEARCH ============
@@ -1432,13 +1449,26 @@ function renderSettingsForDiv(div) {
             <button class="num-btn" onclick="adjSetting('${div}','advPerGroup',1)">+</button>
           </div>
         </div>
+        <div class="sett-row">
+          <div class="sett-label">
+            <span class="sett-name">Number of courts</span>
+            <span class="sett-desc">Courts used simultaneously for this division.</span>
+          </div>
+          <div class="sett-ctrl">
+            <button class="num-btn" onclick="adjSetting('${div}','courts',-1)">−</button>
+            <span class="num-val">${cfg.courts}</span>
+            <button class="num-btn" onclick="adjSetting('${div}','courts',1)">+</button>
+          </div>
+        </div>
       </div>
       <div class="sett-card">
         <div class="sett-card-title">Time Settings</div>
         <div class="sett-row">
           <div class="sett-label">
             <span class="sett-name">Start time</span>
-            <span class="sett-desc">When the first game begins.</span>
+            <span class="sett-desc">${div === 'men' && S.women.sched.length
+              ? `Auto-set to start after Women finish (${estimateEnd('women')})`
+              : 'When the first game begins.'}</span>
           </div>
           <div class="sett-ctrl">
             <input type="time" class="time-inp" value="${cfg.startTime}" onchange="updateTimeSetting('${div}','startTime',this.value)" />
@@ -1527,6 +1557,8 @@ function applySettings(div) {
     S[div].sched  = [];
     S[div].ko     = [];
     generateScheduleForDiv(div);
+    // Women applied → chain men's start time
+    if (div === 'women') chainMenAfterWomen();
   } finally {
     applyingRemoteState = false;
   }
