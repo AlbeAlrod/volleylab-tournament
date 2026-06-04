@@ -1100,7 +1100,7 @@ function renderScheduleContent() {
 
   const inp = document.getElementById('sched-search');
   const rawQuery = inp ? inp.value.trim() : '';
-  if (rawQuery && !schedFilter.length) {
+  if (rawQuery && (!schedFilter.length || schedFilter[0] === '__no_match__')) {
     el.innerHTML = `<div class="empty"><h3>No match</h3><p>No couple found for "<strong>${rawQuery}</strong>"</p></div>`;
     return;
   }
@@ -1390,9 +1390,6 @@ function renderSettingsForDiv(div) {
   const endMins    = sh*60 + sm + (poolSlots + koSlots) * slot;
   const endH = String(Math.floor(endMins/60)%24).padStart(2,'0');
   const endM = String(endMins%60).padStart(2,'0');
-  const isQF  = nc === 10 && ng === 2;
-  const isR16 = nc === 12 && ng === 4;
-
   return `
     <div class="sett-grid">
       <div class="sett-card">
