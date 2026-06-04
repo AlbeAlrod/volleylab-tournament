@@ -137,7 +137,8 @@ onSnapshot(MEN_REF, snap => {
 
 // ============ CONSTANTS ============
 const PILLS = ['p1','p2','p3','p4'];
-const PW = 'volleylab';
+// Password stored as SHA-256 hash only — plain text never appears in code
+const PW_HASH = 'c8a278967617ab64ed67f10626278b90efe917a3c1bfe29001b10f1806a42930';
 
 const DEF_CFG_WOMEN = { numCouples:10, courts:2, numGroups:2, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:0 };
 const DEF_CFG_MEN   = { numCouples:16, courts:2, numGroups:4, advPerGroup:2, startTime:'07:00', gameDur:30, breakDur:0, courtOffset:0 };
@@ -269,9 +270,11 @@ function adminClick() {
   setTimeout(() => document.getElementById('pw-inp').focus(), 80);
 }
 
-function tryLogin() {
+async function tryLogin() {
   const val = document.getElementById('pw-inp').value;
-  if (val === PW) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(val));
+  const hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  if (hex === PW_HASH) {
     admin = true; closeLogin(); refreshA(); rerender();
   } else {
     document.getElementById('pw-err').classList.remove('h');
