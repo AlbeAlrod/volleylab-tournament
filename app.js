@@ -394,16 +394,19 @@ function renderTeams(highlight) {
   grid.innerHTML = '';
 
   if (activeDiv === 'all') {
-    // Flat grid — no section headers, W/M badge on each card
-    const subGrid = document.createElement('div');
-    subGrid.className = 'groups-subgrid';
     ['women','men'].forEach(div => {
+      const hdr = document.createElement('div');
+      hdr.className = 'div-section-header';
+      hdr.textContent = div === 'women' ? 'WOMEN' : 'MEN';
+      grid.appendChild(hdr);
+      const subGrid = document.createElement('div');
+      subGrid.className = 'groups-subgrid';
       S[div].groups.forEach((grp, gi) => {
         if (highlight && !grp.teams.some(t => t.toLowerCase().includes(highlight.toLowerCase()))) return;
         subGrid.appendChild(makeGroupCard(div, grp, gi));
       });
+      grid.appendChild(subGrid);
     });
-    grid.appendChild(subGrid);
   } else {
     const DS = S[activeDiv];
     const subGrid = document.createElement('div');
@@ -666,12 +669,16 @@ function renderStandings() {
   grid.innerHTML = '';
 
   if (activeDiv === 'all') {
-    const sub = document.createElement('div');
-    sub.className = 'stnds-subgrid';
     ['women','men'].forEach(div => {
+      const hdr = document.createElement('div');
+      hdr.className = 'div-section-header';
+      hdr.textContent = div === 'women' ? 'WOMEN' : 'MEN';
+      grid.appendChild(hdr);
+      const sub = document.createElement('div');
+      sub.className = 'stnds-subgrid';
       S[div].groups.forEach((grp, gi) => sub.appendChild(makeStandingsCard(div, grp, gi)));
+      grid.appendChild(sub);
     });
-    grid.appendChild(sub);
   } else {
     const DS  = S[activeDiv];
     const sub = document.createElement('div');
