@@ -315,6 +315,15 @@ main{position:relative;z-index:5;max-width:980px;margin:0 auto;padding:24px 16px
 .wmode-btn:hover{background:var(--surface);border-color:var(--purple2);}
 .wmode-btn.on{background:var(--purple);color:#fff;border-color:var(--purple);}
 
+/* ===== MOBILE HEADER — two rows ===== */
+.header-right{display:flex;align-items:center;gap:8px;}
+@media (max-width:640px){
+  header{flex-wrap:wrap;height:auto;padding:10px 16px 8px;gap:0;}
+  .logo{flex:0 0 100%;margin-bottom:8px;}   /* full-width first row */
+  .div-filter{flex:1;justify-content:flex-start;}
+  .header-right{flex-shrink:0;margin-left:auto;}
+}
+
 /* ===== CHAMPION DISPLAY (no emoji) ===== */
 .ci{font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;letter-spacing:3px;
   color:var(--gold);text-transform:uppercase;margin-bottom:8px;}
