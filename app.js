@@ -21,9 +21,9 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
-const WOMEN_REF = doc(db, "tournaments", "women5");
-const MEN_REF   = doc(db, "tournaments", "men5");
-const STORE = 'vl25b_v6';
+const WOMEN_REF = doc(db, "tournaments", "women4");
+const MEN_REF   = doc(db, "tournaments", "men4");
+const STORE = 'vl25b_v5';
 
 let firebaseReady = false;
 let applyingRemoteState = false;
